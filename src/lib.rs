@@ -14,27 +14,62 @@ struct SpatialRefSys {
     definition: String,
     description: String,
 }
+const CREATE_EXTENSTIONS_TABLE: &str = "CREATE TABLE gpkg_extensions (
+        table_name TEXT,
+        column_name TEXT,
+        extension_name TEXT NOT NULL,
+        definition TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        CONSTRAINT ge_tce UNIQUE (table_name, column_name, extension_name)
+    );";
+
+const CREATE_GEOMETRY_COLUMNS_TABLE: &str = "CREATE TABLE gpkg_geometry_columns (
+        table_name TEXT NOT NULL,
+        column_name TEXT NOT NULL,
+        geometry_type_name TEXT NOT NULL,
+        srs_id INTEGER NOT NULL,
+        z TINYINT NOT NULL,
+        m TINYINT NOT NULL,
+        CONSTRAINT pk_geom_cols PRIMARY KEY (table_name, column_name),
+        CONSTRAINT uk_gc_table_name UNIQUE (table_name),
+        CONSTRAINT fk_gc_tn FOREIGN KEY (table_name) REFERENCES gpkg_contents(table_name),
+        CONSTRAINT fk_gc_srs FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys (srs_id)
+    );";
+
 const CREATE_SPATIAL_REF_SYS_TABLE: &str = "CREATE TABLE gpkg_spatial_ref_sys (
         srs_name TEXT NOT NULL,
         srs_id INTEGER NOT NULL PRIMARY KEY,
         organization TEXT NOT NULL,
         organization_coordsys_id INTEGER NOT NULL,
         definition TEXT NOT NULL,
-        description TEXT NOT NULL)
-        ";
+        description TEXT NOT NULL
+    )";
 
-const CREATE_CONTENTS_TABLE_QUERY: &str = "CREATE TABLE gpkg_contents (
-    table_name TEXT NOT NULL PRIMARY KEY,
-    data_type TEXT NOT NULL,
-    identifier TEXT UNIQUE,
-    description TEXT DEFAULT '',
-    last_change DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    min_x DOUBLE,
-    min_y DOUBLE,
-    max_x DOUBLE,
-    max_y DOUBLE,
-    srs_id INTEGER,
-    CONSTRAINT fk_gc_r_srs_id FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id)
+const CREATE_CONTENTS_TABLE: &str = "CREATE TABLE gpkg_contents (
+        table_name TEXT NOT NULL PRIMARY KEY,
+        data_type TEXT NOT NULL,
+        identifier TEXT UNIQUE,
+        description TEXT DEFAULT '',
+        last_change DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+        min_x DOUBLE,
+        min_y DOUBLE,
+        max_x DOUBLE,
+        max_y DOUBLE,
+        srs_id INTEGER,
+        CONSTRAINT fk_gc_r_srs_id FOREIGN KEY (srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id)
+    )";
+
+const CREATE_TILE_MATRIX_TABLE: &str = "CREATE TABLE gpkg_tile_matrix (
+        table_name TEXT NOT NULL,
+        zoom_level INTEGER NOT NULL,
+        matrix_width INTEGER NOT NULL,
+        matrix_height INTEGER NOT NULL,
+        tile_width INTEGER NOT NULL,
+        tile_height INTEGER NOT NULL,
+        pixel_x_size DOUBLE NOT NULL,
+        pixel_y_size DOUBLE NOT NULL,
+        CONSTRAINT pk_ttm PRIMARY KEY (table_name, zoom_level),
+        CONSTRAINT fk_tmm_table_name FOREIGN KEY (table_name) REFERENCES gpkg_contents(table_name)
     );";
 
 // let default_ref_systems = vec![
@@ -58,7 +93,7 @@ fn create<P: AsRef<Path>>(path: P) -> Result<GeoPackage> {
     let conn = Connection::open(path)?;
     conn.pragma_update(Some(DatabaseName::Main), "application_id", 0x47504B47)?;
     conn.pragma_update(Some(DatabaseName::Main), "user_version", 10300)?;
-    conn.execute(CREATE_CONTENTS_TABLE_QUERY, [])?;
+    conn.execute(CREATE_CONTENTS_TABLE, [])?;
     conn.execute(CREATE_SPATIAL_REF_SYS_TABLE, [])?;
     conn.execute("INSERT INTO gpkg_spatial_ref_sys VALUES (?1, ?2, ?3, ?4, ?5, ?6)", params![
                 "WGS 84 geodetic", 
