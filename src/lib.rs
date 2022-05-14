@@ -10,17 +10,6 @@ struct GeoPackage {
     conn: Connection,
 }
 
-// let default_ref_systems = vec![
-//     SpatialRefSys {
-//         name: "WGS 84 geodetic",
-//         id: 4326,
-//         organization: "EPSG",
-//         organization_coordsys_id: 4326,
-//         definition: "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]]",
-//         description: "longitude/latitude coordinates in decimal degrees on the WGS 84 spheroid",
-//     },
-// ];
-
 impl GeoPackage {
     pub fn create<P: AsRef<Path>>(path: P) -> Result<GeoPackage> {
         let conn = Connection::open(path)?;
