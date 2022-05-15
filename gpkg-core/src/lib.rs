@@ -8,12 +8,21 @@ use std::path::Path;
 
 struct GeoPackage {
     conn: Connection,
+    tables: Vec<TableDefinition>,
+}
+
+struct TableDefinition {
+    name: String,
 }
 
 impl GeoPackage {
+    // creates an empty geopackage that conforms to the spec
     pub fn create<P: AsRef<Path>>(path: P) -> Result<GeoPackage> {
         let conn = Connection::open(path)?;
-        let gpkg = GeoPackage { conn };
+        let gpkg = GeoPackage {
+            conn,
+            tables: Vec::new(),
+        };
         gpkg.conn
             .pragma_update(Some(DatabaseName::Main), "application_id", 0x47504B47)?;
         gpkg.conn
@@ -49,6 +58,10 @@ impl GeoPackage {
         Ok(())
     }
 
+    pub fn create_table(&self, def: &TableDefinition) -> Result<()> {
+        todo!()
+    }
+
     pub fn close(self) {
         self.conn.close().unwrap();
     }
@@ -79,8 +92,10 @@ impl GeoPackage {
             let mut rows = stmt.query([])?;
             assert!(rows.next()?.is_none());
         }
+        // get the tables
+        let tables = Vec::new();
 
-        Ok(GeoPackage { conn })
+        Ok(GeoPackage { conn, tables })
     }
 }
 
@@ -92,10 +107,10 @@ mod tests {
 
     #[test]
     fn new_gpkg() {
-        let path = Path::new("test_data/create.gpkg");
-        let db = GeoPackage::create(path).unwrap();
-        db.close();
-        GeoPackage::open(path).unwrap();
+        // let path = Path::new("../test_data/create.gpkg");
+        // let db = GeoPackage::create(path).unwrap();
+        // db.close();
+        // GeoPackage::open(path).unwrap();
 
         let result = 2 + 2;
         assert_eq!(result, 4);
