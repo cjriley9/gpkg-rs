@@ -3,12 +3,25 @@ mod sql;
 mod srs;
 use crate::sql::table_definitions::*;
 use crate::srs::{defaults::*, SpatialRefSys};
+use geo_types::Polygon;
+pub use gpkg_derive::GPKGModel;
 use rusqlite::{params, Connection, DatabaseName, OpenFlags, Result};
 use std::path::Path;
-
-struct GeoPackage {
-    conn: Connection,
+pub struct GeoPackage {
+    pub conn: Connection,
     tables: Vec<TableDefinition>,
+}
+
+pub trait GPKGModel<'a> {
+    fn create_table(gpkg: &GeoPackage) -> Result<()>;
+}
+
+struct ATestTable<'a> {
+    start_node: i64,
+    end_node: i64,
+    for_cost: f64,
+    rev_cost: &'a [u8],
+    geom: Polygon<f64>,
 }
 
 struct TableDefinition {
@@ -58,9 +71,9 @@ impl GeoPackage {
         Ok(())
     }
 
-    pub fn create_table(&self, def: &TableDefinition) -> Result<()> {
-        todo!()
-    }
+    // fn create_table(&self, def: &TableDefinition) -> Result<()> {
+    //     todo!()
+    // }
 
     pub fn close(self) {
         self.conn.close().unwrap();
@@ -105,12 +118,25 @@ mod tests {
 
     use super::*;
 
+    #[derive(GPKGModel)]
+    #[table_name = "test"]
+    struct TestTable<'a> {
+        start_node: i64,
+        end_node: i64,
+        for_cost: f64,
+        vec_test: Option<Vec<u8>>,
+        rev_cost: &'a str,
+        #[geom_field]
+        geom: Polygon<f64>,
+    }
+
     #[test]
     fn new_gpkg() {
-        // let path = Path::new("../test_data/create.gpkg");
-        // let db = GeoPackage::create(path).unwrap();
-        // db.close();
-        // GeoPackage::open(path).unwrap();
+        let path = Path::new("../test_data/create.gpkg");
+        let db = GeoPackage::create(path).unwrap();
+        TestTable::create_table(&db).expect("Problem creating table");
+        db.close();
+        GeoPackage::open(path).unwrap();
 
         let result = 2 + 2;
         assert_eq!(result, 4);

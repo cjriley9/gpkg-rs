@@ -1,11 +1,10 @@
 #![allow(dead_code)]
-use geo_types::GeometryCollection;
 use proc_macro2::TokenStream;
 use quote::quote;
-use std::{fmt::format, ops::Deref};
+use std::ops::Deref;
 use syn::{
-    parse2, parse_macro_input, Attribute, DeriveInput, Field, GenericArgument, Ident, Lit, Meta,
-    Type, TypePath, TypeReference,
+    parse2, Attribute, DeriveInput, Field, GenericArgument, Ident, Lit, Meta, Type, TypePath,
+    TypeReference,
 };
 
 const GEO_TYPES: &'static [&'static str] = &[
@@ -17,17 +16,16 @@ const GEO_TYPES: &'static [&'static str] = &[
     "MultiPoint",
 ];
 
-// #[proc_macro_derive(GPKGModel)]
-// pub fn derive_gpkg(input: TokenStream) -> TokenStream {
-//     derive_gpkg_inner(input)
-// }
+#[proc_macro_derive(GPKGModel, attributes(table_name, geom_field))]
+pub fn derive_gpkg(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let inner_input = proc_macro2::TokenStream::from(input);
+    proc_macro::TokenStream::from(derive_gpkg_inner(inner_input))
+}
 
-fn derive_gpkg_inner(input: TokenStream) -> TokenStream {
+fn derive_gpkg_inner(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     let ast = parse2::<DeriveInput>(input).unwrap();
-    // let ast = parse_macro_input!(input as DeriveInput);
 
     let tbl_name_meta = get_meta_attr(&ast.attrs, "table_name");
-    // dbg!(&tbl_name_meta);
     let tbl_name = match tbl_name_meta {
         Some(meta) => match meta {
             Meta::NameValue(nv) => match nv.lit {
@@ -278,9 +276,17 @@ fn impl_model(name: &Ident, fields: &Vec<&Field>, tbl_name: Option<String>) -> T
             r#"INSERT INTO gpkg_contents (table_name, data_type, srs_id) VALUES ("{}", "{}", {});"#,
             table_name_final, "features", geom_info.srs_id
         );
-        println!("{}", geom_column_sql.unwrap());
+        // println!("{}", &(geom_column_sql).unwrap());
     };
-    println!("{}", contents_sql);
+    let contents_ts: TokenStream = contents_sql
+        .parse()
+        .expect("Unable to convert contents table insert statement into token stream");
+    let geom_column_ts: TokenStream = match geom_column_sql {
+        Some(s) => s
+            .parse()
+            .expect("Unable to convert contents table insert statement into token stream"),
+        None => TokenStream::new(),
+    };
 
     let column_defs = field_infos
         .iter()
@@ -292,14 +298,22 @@ fn impl_model(name: &Ident, fields: &Vec<&Field>, tbl_name: Option<String>) -> T
         })
         .collect::<Vec<TokenStream>>();
 
+    // need to add some generic support like in here: https://github.com/diesel-rs/diesel/blob/master/diesel_derives/src/insertable.rs#L88
+    // this is so that lifetimes will work
     let new = quote!(
-        impl GPKGModel for #name {
-            fn create_table(&self, gpkg: &GeoPackage) -> String {
-                std::stringify!(
-                    CREATE TABLE #table_name_final (
-                        id INTEGER AUTOINCREMENT PRIMARY KEY,
-                        #(#column_defs ),*
-                    );
+        impl GPKGModel<'_> for #name<'_> {
+            fn create_table(gpkg: &GeoPackage) -> rusqlite::Result<()> {
+                return gpkg.conn.execute_batch(
+                    std::stringify!(
+                        BEGIN;
+                        CREATE TABLE #table_name_final (
+                            object_id INTEGER PRIMARY KEY,
+                            #(#column_defs ),*
+                        );
+                        #geom_column_ts
+                        #contents_ts
+                        COMMIT;
+                    )
                 )
             }
         }
@@ -330,10 +344,10 @@ mod test {
             struct StreetLight {
                 id: i64,
                 height: f64,
-                string_ref: &'a str,
+                string_ref: Option<&'a str>,
                 buf_ref: &'a [u8],
-                #[geom_field]
-                geom: geo_types::Polygon<f64>,
+                // #[geom_field]
+                // geom: geo_types::Polygon<f64>,
                 // test_blob: [u8],
             }
         );
