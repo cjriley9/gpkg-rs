@@ -1,12 +1,16 @@
 #![allow(dead_code)]
+mod gpkg_wkb;
 mod sql;
 mod srs;
 use crate::sql::table_definitions::*;
 use crate::srs::{defaults::*, SpatialRefSys};
+use geo_types::coord;
 use geo_types::Polygon;
 pub use gpkg_derive::GPKGModel;
+use gpkg_wkb::GeoPackageWKB;
 use rusqlite::{params, Connection, DatabaseName, OpenFlags, Result};
 use std::path::Path;
+
 pub struct GeoPackage {
     pub conn: Connection,
     tables: Vec<TableDefinition>,
@@ -14,6 +18,7 @@ pub struct GeoPackage {
 
 pub trait GPKGModel<'a> {
     fn create_table(gpkg: &GeoPackage) -> Result<()>;
+    fn insert_record(&self, gpkg: &GeoPackage) -> Result<()>;
 }
 
 struct ATestTable<'a> {
@@ -116,6 +121,8 @@ impl GeoPackage {
 mod tests {
     use std::path::Path;
 
+    use geo_types::{LineString, Point};
+
     use super::*;
 
     #[derive(GPKGModel)]
@@ -127,7 +134,7 @@ mod tests {
         vec_test: Option<Vec<u8>>,
         rev_cost: &'a str,
         #[geom_field]
-        geom: Polygon<f64>,
+        geom: LineString<f64>,
     }
 
     #[test]
@@ -135,6 +142,15 @@ mod tests {
         let path = Path::new("../test_data/create.gpkg");
         let db = GeoPackage::create(path).unwrap();
         TestTable::create_table(&db).expect("Problem creating table");
+        let val = TestTable {
+            start_node: 42,
+            end_node: 918,
+            for_cost: 12.12,
+            vec_test: Some(vec![1, 2, 3, 4]),
+            rev_cost: "Test values",
+            geom: LineString::new(vec![coord!(x: 40.0, y:-105.0), coord!(x:41.0, y:-106.0)]),
+        };
+        val.insert_record(&db).unwrap();
         db.close();
         GeoPackage::open(path).unwrap();
 

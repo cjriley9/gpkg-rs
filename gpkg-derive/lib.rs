@@ -1,10 +1,10 @@
 #![allow(dead_code)]
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use std::ops::Deref;
 use syn::{
-    parse2, Attribute, DeriveInput, Field, GenericArgument, Ident, Lit, Meta, Type, TypePath,
-    TypeReference,
+    parse2, Attribute, DeriveInput, Field, GenericArgument, GenericParam, Generics, Ident, Lit,
+    LitInt, Meta, Type, TypePath, TypeReference,
 };
 
 const GEO_TYPES: &'static [&'static str] = &[
@@ -49,7 +49,7 @@ fn derive_gpkg_inner(input: proc_macro2::TokenStream) -> proc_macro2::TokenStrea
     }
     .collect();
 
-    impl_model(&name.clone(), &fields, tbl_name)
+    impl_model(&name.clone(), &fields, tbl_name, &ast.generics)
 }
 
 fn get_meta_attr<'a>(attrs: &Vec<Attribute>, name: &'a str) -> Option<Meta> {
@@ -186,7 +186,12 @@ fn get_path_type_name(p: &TypePath) -> (String, bool) {
     (final_segment.ident.to_string(), false)
 }
 
-fn impl_model(name: &Ident, fields: &Vec<&Field>, tbl_name: Option<String>) -> TokenStream {
+fn impl_model(
+    name: &Ident,
+    fields: &Vec<&Field>,
+    tbl_name: Option<String>,
+    generics: &Generics,
+) -> TokenStream {
     // overwrite the struct name with a provided table name if one is given
     // TODO: add some level of validation here based on sqlite's rules
     let table_name_final = match tbl_name {
@@ -195,6 +200,18 @@ fn impl_model(name: &Ident, fields: &Vec<&Field>, tbl_name: Option<String>) -> T
     };
 
     let geom_field_name: String;
+
+    let mut final_generics = generics.clone();
+
+    if let Some(g) = final_generics.params.first_mut() {
+        match g {
+            GenericParam::Lifetime(l) => match l.lifetime.ident.to_string().as_str() {
+                "static" | "_" => {}
+                _ => l.lifetime.ident = Ident::new("_", Span::call_site()),
+            },
+            _ => {}
+        }
+    }
 
     // the goal is to support everything here (https://www.geopackage.org/spec130/index.html#table_column_data_types)
     // as well as allow the user change whether a field can have nulls or not with the option type
@@ -298,10 +315,28 @@ fn impl_model(name: &Ident, fields: &Vec<&Field>, tbl_name: Option<String>) -> T
         })
         .collect::<Vec<TokenStream>>();
 
+    let column_names: Vec<Ident> = field_infos
+        .iter()
+        .map(|i| Ident::new(i.name.as_str(), Span::call_site()))
+        .collect();
+
+    let params = vec![quote!(?); column_names.len()];
+
+    let column_params: Vec<TokenStream> = field_infos
+        .iter()
+        .map(|i| {
+            let name_ident = Ident::new(i.name.as_str(), Span::call_site());
+            match i.geom_info {
+                Some(_) => return quote!(self.#name_ident.toWKB().unwrap()),
+                _ => return quote!(self.#name_ident),
+            }
+        })
+        .collect();
+
     // need to add some generic support like in here: https://github.com/diesel-rs/diesel/blob/master/diesel_derives/src/insertable.rs#L88
     // this is so that lifetimes will work
     let new = quote!(
-        impl GPKGModel<'_> for #name<'_> {
+        impl GPKGModel <'_> for #name #final_generics {
             fn create_table(gpkg: &GeoPackage) -> rusqlite::Result<()> {
                 return gpkg.conn.execute_batch(
                     std::stringify!(
@@ -315,6 +350,24 @@ fn impl_model(name: &Ident, fields: &Vec<&Field>, tbl_name: Option<String>) -> T
                         COMMIT;
                     )
                 )
+            }
+
+            fn insert_record(&self, gpkg: &GeoPackage) -> rusqlite::Result<()> {
+                let sql =
+                    std::stringify!(
+                        INSERT INTO #table_name_final (
+                            #(#column_names),*
+                        ) VALUES (
+                            #(#params),*
+                        )
+                    );
+                gpkg.conn.execute(
+                    sql,
+                    rusqlite::params![
+                        #(#column_params),*
+                    ]
+                )?;
+                Ok(())
             }
         }
     );
