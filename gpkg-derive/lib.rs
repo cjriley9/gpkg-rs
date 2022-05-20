@@ -332,6 +332,9 @@ fn impl_model(
             }
         })
         .collect();
+    let column_nums = (0..column_defs.len())
+        .map(|i| LitInt::new(i.to_string().as_str(), Span::call_site()))
+        .collect::<Vec<LitInt>>();
 
     // need to add some generic support like in here: https://github.com/diesel-rs/diesel/blob/master/diesel_derives/src/insertable.rs#L88
     // this is so that lifetimes will work
@@ -368,6 +371,23 @@ fn impl_model(
                     ]
                 )?;
                 Ok(())
+            }
+
+            fn get_first(gpkg: &GeoPackage) -> Self {
+                let mut stmt = gpkg.conn.prepare(
+                    std::stringify!(
+                        SELECT #(#column_names),* FROM #table_name_final;
+                    )
+                ).unwrap();
+                let mut rows = stmt.query([]).unwrap();
+                if let Some(row) = rows.next().unwrap() {
+                    Self {
+                        #(#column_names: row.get((#column_nums)).unwrap(),)*
+                    }
+                }
+                else {
+                    panic!("Didn't get any rows")
+                }
             }
         }
     );

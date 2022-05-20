@@ -19,6 +19,7 @@ pub struct GeoPackage {
 pub trait GPKGModel<'a> {
     fn create_table(gpkg: &GeoPackage) -> Result<()>;
     fn insert_record(&self, gpkg: &GeoPackage) -> Result<()>;
+    fn get_first(gpkg: &GeoPackage) -> Self;
 }
 
 struct ATestTable<'a> {
@@ -125,16 +126,14 @@ mod tests {
 
     use super::*;
 
-    #[derive(GPKGModel)]
+    #[derive(GPKGModel, Debug)]
     #[table_name = "test"]
-    struct TestTable<'a> {
+    struct TestTable {
         start_node: i64,
         end_node: i64,
-        for_cost: f64,
-        vec_test: Option<Vec<u8>>,
-        rev_cost: &'a str,
-        #[geom_field]
-        geom: LineString<f64>,
+        rev_cost: String,
+        // #[geom_field]
+        // geom: LineString<f64>,
     }
 
     #[test]
@@ -145,12 +144,12 @@ mod tests {
         let val = TestTable {
             start_node: 42,
             end_node: 918,
-            for_cost: 12.12,
-            vec_test: Some(vec![1, 2, 3, 4]),
-            rev_cost: "Test values",
-            geom: LineString::new(vec![coord!(x: 40.0, y:-105.0), coord!(x:41.0, y:-106.0)]),
+            rev_cost: "Test values".to_owned(),
+            // geom: LineString::new(vec![coord!(x: 40.0, y:-105.0), coord!(x:41.0, y:-106.0)]),
         };
         val.insert_record(&db).unwrap();
+        println!("{:?}", TestTable::get_first(&db));
+
         db.close();
         GeoPackage::open(path).unwrap();
 
