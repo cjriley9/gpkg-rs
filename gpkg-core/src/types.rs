@@ -4,53 +4,55 @@ pub enum Error {
     GeomDecodeError,
     #[error("Error encoding WKB geometry")]
     GeomEncodeError,
+    #[error("Unsupported WKB geometry type")]
+    UnsupportedGeometryType,
 }
 
-pub struct PointM {
+pub struct GPKGPointM {
     x: f64,
     y: f64,
     m: f64,
 }
 
-pub struct PointZ {
+pub struct GPKGPointZ {
     x: f64,
     y: f64,
     z: f64,
 }
 
-pub struct PointZM {
+pub struct GPKGPointZM {
     x: f64,
     y: f64,
     z: f64,
     m: f64,
 }
-pub type MultiPointM = Vec<PointM>;
-pub type MultiPointZ = Vec<PointZ>;
-pub type MultiPointZM = Vec<PointZM>;
+pub type GPKGMultiPointM = Vec<GPKGPointM>;
+pub type GPKGMultiPointZ = Vec<GPKGPointZ>;
+pub type GPKGMultiPointZM = Vec<GPKGPointZM>;
 
-pub type LineStringM = Vec<PointM>;
-pub type LineStringZ = Vec<PointZ>;
-pub type LineStringZM = Vec<PointZM>;
+pub type GPKGLineStringM = Vec<GPKGPointM>;
+pub type GPKGLineStringZ = Vec<GPKGPointZ>;
+pub type GPKGLineStringZM = Vec<GPKGPointZM>;
 
-pub type MultiLineStringM = Vec<LineStringM>;
-pub type MultiLineStringZ = Vec<LineStringZ>;
-pub type MultiLineStringZM = Vec<LineStringZM>;
+pub type GPKGMultiLineStringM = Vec<GPKGLineStringM>;
+pub type GPKGMultiLineStringZ = Vec<GPKGLineStringZ>;
+pub type GPKGMultiLineStringZM = Vec<GPKGLineStringZM>;
 
-pub struct PolygonM {
-    exterior: LineStringM,
-    interiors: Vec<LineStringM>,
+pub struct GPKGPolygonM {
+    exterior: GPKGLineStringM,
+    interiors: Vec<GPKGLineStringM>,
 }
 
-pub struct PolygonZ {
-    exterior: LineStringZ,
-    interiors: Vec<LineStringZ>,
+pub struct GPKGPolygonZ {
+    exterior: GPKGLineStringZ,
+    interiors: Vec<GPKGLineStringZ>,
 }
 
-pub struct PolygonZM {
-    exterior: LineStringZM,
-    interiors: Vec<LineStringZM>,
+pub struct GPKGPolygonZM {
+    exterior: GPKGLineStringZM,
+    interiors: Vec<GPKGLineStringZM>,
 }
 
-pub type MultiPolygonM = Vec<PolygonM>;
-pub type MultiPolygonZ = Vec<PolygonZ>;
-pub type MultiPolygonZM = Vec<PolygonZM>;
+pub type GPKGMultiPolygonM = Vec<GPKGPolygonM>;
+pub type GPKGMultiPolygonZ = Vec<GPKGPolygonZ>;
+pub type GPKGMultiPolygonZM = Vec<GPKGPolygonZM>;
