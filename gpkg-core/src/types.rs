@@ -1,5 +1,4 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
-use core::num;
 use std::io::{Read, Write};
 use wkb::WKBReadError;
 
@@ -34,9 +33,7 @@ impl GPKGPointZ {
         w.write_all(&self.z.to_le_bytes())?;
         Ok(())
     }
-    pub fn read_from_bytes<T: byteorder::ByteOrder, U: Read>(
-        r: &mut U,
-    ) -> Result<Self, WKBReadError> {
+    pub fn read_from_bytes<T: ByteOrder, U: Read>(r: &mut U) -> Result<Self, WKBReadError> {
         let x = r.read_f64::<T>()?;
         let y = r.read_f64::<T>()?;
         let z = r.read_f64::<T>()?;
@@ -53,9 +50,7 @@ impl GPKGLineStringZ {
         }
         Ok(())
     }
-    pub fn read_from_bytes<T: byteorder::ByteOrder, U: Read>(
-        r: &mut U,
-    ) -> Result<Self, WKBReadError> {
+    pub fn read_from_bytes<T: ByteOrder, U: Read>(r: &mut U) -> Result<Self, WKBReadError> {
         let num_points = r.read_u32::<T>()?;
         dbg!(num_points);
         let mut out_vec: Vec<GPKGPointZ> = Vec::new();
@@ -160,3 +155,16 @@ pub struct GPKGMultiPolygonM(Vec<GPKGPolygonM>);
 pub struct GPKGMultiPolygonZ(Vec<GPKGPolygonZ>);
 #[derive(Debug)]
 pub struct GPKGMultiPolygonZM(Vec<GPKGPolygonZM>);
+
+#[derive(Debug)]
+pub struct GPKGPoint(pub geo_types::Point<f64>);
+#[derive(Debug)]
+pub struct GPKGLineString(pub geo_types::LineString<f64>);
+#[derive(Debug)]
+pub struct GPKGPolygon(pub geo_types::Polygon<f64>);
+#[derive(Debug)]
+pub struct GPKGMultiPoint(pub geo_types::MultiPoint<f64>);
+#[derive(Debug)]
+pub struct GPKGMultiLineString(pub geo_types::MultiLineString<f64>);
+#[derive(Debug)]
+pub struct GPKGMultiPolygon(pub geo_types::MultiPolygon<f64>);

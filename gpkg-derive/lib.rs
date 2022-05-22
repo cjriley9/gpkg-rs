@@ -240,6 +240,7 @@ fn impl_model(
             let field_name = f.ident.as_ref().expect("Expected named field").to_string();
             let type_name: String;
             let is_geom_field = is_geom_field(&f);
+            dbg!(is_geom_field);
             match &f.ty {
                 syn::Type::Reference(r) => {
                     type_name = get_reference_type_name(r);
@@ -297,15 +298,17 @@ fn impl_model(
     if geom_fields.len() > 0 {
         let geom_field = geom_fields[0];
         let geom_info = geom_field.geom_info.clone().unwrap();
+        let mut geom_type_sql = geom_info.geom_type.clone();
+        geom_type_sql.replace_range(0..4, "");
         geom_field_name = geom_field.name.clone();
         geom_column_sql = Some(format!(
             r#"INSERT INTO gpkg_geometry_columns VALUES("{}", "{}", "{}", {}, {}, {});"#,
             table_name_final,
             geom_field_name,
-            geom_info.geom_type.to_uppercase(),
+            geom_type_sql.to_uppercase(),
             geom_info.srs_id,
             geom_info.m as i32,
-            geom_info.z as u32
+            geom_info.z as i32
         ));
         contents_sql = format!(
             r#"INSERT INTO gpkg_contents (table_name, data_type, srs_id) VALUES ("{}", "{}", {});"#,
@@ -388,21 +391,39 @@ fn impl_model(
                 Ok(())
             }
 
-            fn get_first(gpkg: &GeoPackage) -> Self {
+            fn get_first(gpkg: &GeoPackage) -> Result<Option<Self>, rusqlite::Error> {
                 let mut stmt = gpkg.conn.prepare(
                     std::stringify!(
                         SELECT #(#column_names),* FROM #table_name_final;
                     )
-                ).unwrap();
-                let mut rows = stmt.query([]).unwrap();
-                if let Some(row) = rows.next().unwrap() {
-                    Self {
-                        #(#column_names: row.get((#column_nums)).unwrap(),)*
-                    }
+                )?;
+                let mut rows = stmt.query([])?;
+                if let Some(row) = rows.next()? {
+                    Ok(Some(Self {
+                        #(#column_names: row.get((#column_nums))?,)*
+                    }))
                 }
                 else {
-                    panic!("Didn't get any rows")
+                    Ok(None)
                 }
+            }
+
+            fn get_all(gpkg: &GeoPackage) -> Result<Vec<Self>, rusqlite::Error> {
+                let mut stmt = gpkg.conn.prepare(
+                    std::stringify!(
+                        SELECT #(#column_names),* FROM #table_name_final;
+                    )
+                )?;
+                let mut out_vec = Vec::new();
+                let rows = stmt.query_map([], |row| {
+                    Ok(Self {
+                        #(#column_names: row.get((#column_nums))?,)*
+                    })
+                })?;
+                for r in rows {
+                    out_vec.push(r?)
+                }
+                Ok(out_vec)
             }
         }
     );
@@ -434,8 +455,8 @@ mod test {
                 height: f64,
                 string_ref: Option<String>,
                 buf_ref: &'a [u8],
-                // #[geom_field]
-                // geom: geo_types::Polygon<f64>,
+                #[geom_field]
+                geom: GPKGLineStringZ,
                 // test_blob: [u8],
             }
         );

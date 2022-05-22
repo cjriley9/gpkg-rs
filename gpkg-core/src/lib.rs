@@ -15,10 +15,11 @@ pub struct GeoPackage {
     tables: Vec<TableDefinition>,
 }
 
-pub trait GPKGModel<'a> {
+pub trait GPKGModel<'a>: Sized {
     fn create_table(gpkg: &GeoPackage) -> Result<()>;
     fn insert_record(&self, gpkg: &GeoPackage) -> Result<()>;
-    fn get_first(gpkg: &GeoPackage) -> Self;
+    fn get_first(gpkg: &GeoPackage) -> Result<Option<Self>>;
+    fn get_all(gpkg: &GeoPackage) -> Result<Vec<Self>>;
 }
 
 struct ATestTable<'a> {
@@ -123,10 +124,7 @@ mod tests {
 
     use geo_types::{coord, LineString, Point, Polygon};
 
-    use crate::{
-        gpkg_wkb::{GPKGLineString, GPKGPolygon},
-        types::{GPKGLineStringZ, GPKGPointZ},
-    };
+    use crate::types::*;
 
     use super::*;
 
@@ -162,8 +160,26 @@ mod tests {
                 },
             ]),
         };
+        let val2 = TestTable {
+            start_node: Some(45),
+            end_node: 918,
+            rev_cost: "Test values".to_owned(),
+            geom: GPKGLineStringZ(vec![
+                GPKGPointZ {
+                    x: 40.0,
+                    y: -105.0,
+                    z: 5280.0,
+                },
+                GPKGPointZ {
+                    x: 41.0,
+                    y: -106.0,
+                    z: 5280.0,
+                },
+            ]),
+        };
         val.insert_record(&db).unwrap();
-        println!("{:?}", TestTable::get_first(&db));
+        val2.insert_record(&db).unwrap();
+        println!("{:?}", TestTable::get_all(&db));
 
         db.close();
         GeoPackage::open(path).unwrap();

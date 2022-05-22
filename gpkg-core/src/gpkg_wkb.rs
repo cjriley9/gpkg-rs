@@ -14,19 +14,6 @@ pub trait GeoPackageWKB: Sized {
     fn from_wkb(wkb: &mut [u8]) -> Result<Self, wkb::WKBReadError>;
 }
 
-#[derive(Debug)]
-pub struct GPKGPoint(pub geo_types::Point<f64>);
-#[derive(Debug)]
-pub struct GPKGLineString(pub geo_types::LineString<f64>);
-#[derive(Debug)]
-pub struct GPKGPolygon(pub geo_types::Polygon<f64>);
-#[derive(Debug)]
-pub struct GPKGMultiPoint(pub geo_types::MultiPoint<f64>);
-#[derive(Debug)]
-pub struct GPKGMultiLineString(pub geo_types::MultiLineString<f64>);
-#[derive(Debug)]
-pub struct GPKGMultiPolygon(pub geo_types::MultiPolygon<f64>);
-
 enum EnvelopeType {
     Missing,
     XY,
