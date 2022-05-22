@@ -5,6 +5,7 @@ edition = "2021"
 homepage = "https://github.com/cjriley9/gpkg-rs"
 repository = "https://github.com/cjriley9/gpkg-rs"
 license = "MIT OR Apache-2.0"
+description = "Internal crate used for derive macros in gpkg crate"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
