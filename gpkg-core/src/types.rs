@@ -13,6 +13,7 @@ pub enum Error {
     UnsupportedGeometryType,
 }
 
+#[derive(Debug)]
 pub struct GPKGPointM {
     pub x: f64,
     pub y: f64,
@@ -45,7 +46,9 @@ impl GPKGPointZ {
 
 impl GPKGLineStringZ {
     pub fn write_as_bytes(&self, w: &mut impl Write) -> Result<(), wkb::WKBWriteError> {
+        w.write_u32::<LittleEndian>(self.0.len() as u32)?;
         for p in &self.0 {
+            dbg!(p);
             p.write_as_bytes(w)?
         }
         Ok(())
@@ -54,6 +57,7 @@ impl GPKGLineStringZ {
         r: &mut U,
     ) -> Result<Self, WKBReadError> {
         let num_points = r.read_u32::<T>()?;
+        dbg!(num_points);
         let mut out_vec: Vec<GPKGPointZ> = Vec::new();
         for _ in 0..num_points {
             out_vec.push(GPKGPointZ::read_from_bytes::<T, _>(r)?);
@@ -104,39 +108,55 @@ macro_rules! wkb_ext {
 wkb_ext! {GPKGPointZ, 1001}
 wkb_ext! {GPKGLineStringZ, 1002}
 
+#[derive(Debug)]
 pub struct GPKGPointZM {
     x: f64,
     y: f64,
     z: f64,
     m: f64,
 }
+#[derive(Debug)]
 pub struct GPKGMultiPointM(pub Vec<GPKGPointM>);
+#[derive(Debug)]
 pub struct GPKGMultiPointZ(pub Vec<GPKGPointZ>);
+#[derive(Debug)]
 pub struct GPKGMultiPointZM(pub Vec<GPKGPointZM>);
 
+#[derive(Debug)]
 pub struct GPKGLineStringM(pub Vec<GPKGPointM>);
+#[derive(Debug)]
 pub struct GPKGLineStringZ(pub Vec<GPKGPointZ>);
+#[derive(Debug)]
 pub struct GPKGLineStringZM(pub Vec<GPKGPointZM>);
 
+#[derive(Debug)]
 pub struct GPKGMultiLineStringM(pub Vec<GPKGLineStringM>);
+#[derive(Debug)]
 pub struct GPKGMultiLineStringZ(pub Vec<GPKGLineStringZ>);
+#[derive(Debug)]
 pub struct GPKGMultiLineStringZM(pub Vec<GPKGLineStringZM>);
 
+#[derive(Debug)]
 pub struct GPKGPolygonM {
     exterior: GPKGLineStringM,
     interiors: Vec<GPKGLineStringM>,
 }
 
+#[derive(Debug)]
 pub struct GPKGPolygonZ {
     exterior: GPKGLineStringZ,
     interiors: Vec<GPKGLineStringZ>,
 }
 
+#[derive(Debug)]
 pub struct GPKGPolygonZM {
     exterior: GPKGLineStringZM,
     interiors: Vec<GPKGLineStringZM>,
 }
 
+#[derive(Debug)]
 pub struct GPKGMultiPolygonM(Vec<GPKGPolygonM>);
+#[derive(Debug)]
 pub struct GPKGMultiPolygonZ(Vec<GPKGPolygonZ>);
+#[derive(Debug)]
 pub struct GPKGMultiPolygonZM(Vec<GPKGPolygonZM>);

@@ -119,7 +119,8 @@ impl_gpkg_sql_wkb! {
     GPKGMultiPoint,
     GPKGMultiPolygon,
     GPKGMultiLineString,
-    GPKGPointZ
+    GPKGPointZ,
+    GPKGLineStringZ
 }
 
 impl GeoPackageWKB for GPKGPoint {
@@ -244,6 +245,45 @@ impl GeoPackageWKB for GPKGLineString {
         Ok(GPKGLineString(
             geom.try_into().map_err(|_| wkb::WKBReadError::WrongType)?,
         ))
+    }
+}
+
+impl GeoPackageWKB for GPKGLineStringZ {
+    fn to_wkb(&self) -> Result<Vec<u8>, wkb::WKBWriteError> {
+        let mut header: Vec<u8> = Vec::new();
+        // magic number that is GP in ASCII
+        header.extend_from_slice(&[0x47, 0x50]);
+        // version number, 0 means version 1
+        header.push(0);
+        let flags = 0b00000001;
+        header.push(flags);
+        let srs = i32::to_le_bytes(4326);
+        header.extend_from_slice(&srs);
+        self.write_as_wkb(&mut header)?;
+        Ok(header)
+    }
+    fn from_wkb(bytes: &mut [u8]) -> Result<Self, wkb::WKBReadError> {
+        // for now we should just kinda ignore the header and just chew through it
+        // let magic = u16::from(wkb[0..2]);
+        let flags = GPKGGeomFlags::from_byte(bytes[3]);
+        let mut srs_bytes: [u8; 4] = Default::default();
+        srs_bytes.copy_from_slice(&bytes[4..8]);
+        let _srs = match flags.little_endian {
+            true => i32::from_le_bytes(srs_bytes),
+            false => i32::from_be_bytes(srs_bytes),
+        };
+        let envelope_length: usize = match flags.envelope {
+            EnvelopeType::Missing => 0,
+            EnvelopeType::XY => 32,
+            EnvelopeType::XYZ | EnvelopeType::XYM => 48,
+            EnvelopeType::XYZM => 64,
+        };
+
+        let geom_start = 8 + envelope_length;
+
+        let mut bytes_cursor = Cursor::new(&bytes[geom_start..]);
+
+        Ok(GPKGLineStringZ::read_from_wkb(&mut bytes_cursor)?)
     }
 }
 
