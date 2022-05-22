@@ -1,5 +1,5 @@
 [package]
-name = "gpkg-core"
+name = "gpkg"
 version = "0.1.0"
 edition = "2021"
 homepage = "https://github.com/cjriley9/gpkg-rs"
