@@ -8,12 +8,30 @@ use syn::{
 };
 
 const GEO_TYPES: &'static [&'static str] = &[
-    "Polygon",
-    "LineString",
-    "Point",
-    "MultiPolygon",
-    "MultiLineString",
-    "MultiPoint",
+    "GPKGPolygon",
+    "GPKGLineString",
+    "GPKGPoint",
+    "GPKGMultiPolygon",
+    "GPKGMultiLineString",
+    "GPKGMultiPoint",
+    "GPKGPolygonM",
+    "GPKGLineStringM",
+    "GPKGPointM",
+    "GPKGMultiPolygonM",
+    "GPKGMultiLineStringM",
+    "GPKGMultiPointM",
+    "GPKGPolygonZ",
+    "GPKGLineStringZ",
+    "GPKGPointZ",
+    "GPKGMultiPolygonZ",
+    "GPKGMultiLineStringZ",
+    "GPKGMultiPointZ",
+    "GPKGPolygonZM",
+    "GPKGLineStringZM",
+    "GPKGPointZM",
+    "GPKGMultiPolygonZM",
+    "GPKGMultiLineStringZM",
+    "GPKGMultiPointZM",
 ];
 
 #[proc_macro_derive(GPKGModel, attributes(table_name, geom_field))]
@@ -155,30 +173,30 @@ fn get_path_type_name(p: &TypePath) -> (String, bool) {
                 panic!("Vec<u8> is the only allowed use of the Vec type");
             }
         }
-        _ if GEO_TYPES.contains(&id_string.as_str()) => {
-            if let syn::PathArguments::AngleBracketed(a) = &final_segment.arguments {
-                assert!(
-                    a.args.len() == 1,
-                    "Only one argument allowed in a Geometry type"
-                );
-                if let GenericArgument::Type(t) = &a.args[0] {
-                    match t {
-                        Type::Path(p) => {
-                            let type_return = get_path_type_name(p).0;
-                            match type_return.as_str() {
-                            "f64" => return (id_string, optional),
-                            _ => panic!("Geo types must use f64 coordinates for geopackage compatibility"),
-                        };
-                        }
-                        _ => panic!(
-                            "Geo types must use f64 coordinates for geopackage compatibility"
-                        ),
-                    }
-                }
-            } else {
-                panic!("Geo types must use f64 coordinates for geopackage compatibility");
-            }
-        }
+        // _ if GEO_TYPES.contains(&id_string.as_str()) => {
+        //     if let syn::PathArguments::AngleBracketed(a) = &final_segment.arguments {
+        //         assert!(
+        //             a.args.len() == 1,
+        //             "Only one argument allowed in a Geometry type"
+        //         );
+        //         if let GenericArgument::Type(t) = &a.args[0] {
+        //             match t {
+        //                 Type::Path(p) => {
+        //                     let type_return = get_path_type_name(p).0;
+        //                     match type_return.as_str() {
+        //                     "f64" => return (id_string, optional),
+        //                     _ => panic!("Geo types must use f64 coordinates for geopackage compatibility"),
+        //                 };
+        //                 }
+        //                 _ => panic!(
+        //                     "Geo types must use f64 coordinates for geopackage compatibility"
+        //                 ),
+        //             }
+        //         }
+        //     } else {
+        //         panic!("Geo types must use f64 coordinates for geopackage compatibility");
+        //     }
+        // }
         // fall through and use the basic type we got at the beginning
         _ => {}
     }
@@ -326,10 +344,7 @@ fn impl_model(
         .iter()
         .map(|i| {
             let name_ident = Ident::new(i.name.as_str(), Span::call_site());
-            match i.geom_info {
-                Some(_) => return quote!(self.#name_ident.toWKB().unwrap()),
-                _ => return quote!(self.#name_ident),
-            }
+            quote!(self.#name_ident)
         })
         .collect();
     let column_nums = (0..column_defs.len())

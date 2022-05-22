@@ -1,17 +1,26 @@
+use crate::types::Error;
 use geo_types::{coord, Coordinate, LineString, Point};
-use rusqlite::types::ToSqlOutput;
+use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use rusqlite::ToSql;
 use std::convert::Into;
 use std::io::{Cursor, Read};
+use wkb::WKBWriteError;
 
 // pub struct GeoPackageGeom<T: GeoPackageWKB> {
 //     t: T,
 // }
 
 pub trait GeoPackageWKB: Sized {
-    fn toWKB(&self) -> Result<Vec<u8>, wkb::WKBWriteError>;
-    fn fromWKB(wkb: &mut [u8]) -> Result<Self, wkb::WKBReadError>;
+    fn to_wkb(&self) -> Result<Vec<u8>, wkb::WKBWriteError>;
+    fn from_wkb(wkb: &mut [u8]) -> Result<Self, wkb::WKBReadError>;
 }
+
+#[derive(Debug)]
+pub struct GPKGPoint(pub geo_types::Point<f64>);
+#[derive(Debug)]
+pub struct GPKGLineString(pub geo_types::LineString<f64>);
+#[derive(Debug)]
+pub struct GPKGPolygon(pub geo_types::Polygon<f64>);
 
 enum EnvelopeType {
     Missing,
@@ -69,8 +78,8 @@ impl GPKGGeomFlags {
     }
 }
 
-impl GeoPackageWKB for geo_types::Point<f64> {
-    fn toWKB(&self) -> Result<Vec<u8>, wkb::WKBWriteError> {
+impl GeoPackageWKB for GPKGPoint {
+    fn to_wkb(&self) -> Result<Vec<u8>, wkb::WKBWriteError> {
         let mut header: Vec<u8> = Vec::new();
         // magic number that is GP in ASCII
         header.extend_from_slice(&[0x47, 0x50]);
@@ -80,38 +89,11 @@ impl GeoPackageWKB for geo_types::Point<f64> {
         header.push(flags);
         let srs = i32::to_le_bytes(4326);
         header.extend_from_slice(&srs);
-        let geom = wkb::geom_to_wkb(&(self.clone().into()))?;
+        let geom = wkb::geom_to_wkb(&(self.0.clone().into()))?;
         header.extend(geom);
         Ok(header)
     }
-    fn fromWKB(wkb: &mut [u8]) -> Result<Self, wkb::WKBReadError> {
-        Ok(geo_types::Point::new(0.0, 0.0))
-    }
-}
-
-// {
-//     #[inline]
-//     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-//         Ok(ToSqlOutput::from(self.t.toWKB().unwrap()))
-//     }
-// }
-
-impl GeoPackageWKB for geo_types::LineString<f64> {
-    fn toWKB(&self) -> Result<Vec<u8>, wkb::WKBWriteError> {
-        let mut header: Vec<u8> = Vec::new();
-        // magic number that is GP in ASCII
-        header.extend_from_slice(&[0x47, 0x50]);
-        // version number, 0 means version 1
-        header.push(0);
-        let flags = 0b00000001;
-        header.push(flags);
-        let srs = i32::to_le_bytes(4326);
-        header.extend_from_slice(&srs);
-        let geom = wkb::geom_to_wkb(&(self.clone().into()))?;
-        header.extend(geom);
-        Ok(header)
-    }
-    fn fromWKB(bytes: &mut [u8]) -> Result<Self, wkb::WKBReadError> {
+    fn from_wkb(bytes: &mut [u8]) -> Result<Self, wkb::WKBReadError> {
         // for now we should just kinda ignore the header and just chew through it
         // let magic = u16::from(wkb[0..2]);
         let flags = GPKGGeomFlags::from_byte(bytes[3]);
@@ -134,7 +116,84 @@ impl GeoPackageWKB for geo_types::LineString<f64> {
 
         let geom = wkb::wkb_to_geom(&mut bytes_cursor)?;
 
-        Ok(geom.try_into().unwrap())
+        Ok(GPKGPoint(geom.try_into().unwrap()))
+    }
+}
+
+// once there is a GeoPackageWKB impl for the type
+// the to/from sql impls are really simple, so the macro
+// should help with boilerplate
+macro_rules! gpkg_sql_wkb {
+    ($($t:ty),*) => {
+       $(
+            impl ToSql for $t {
+                #[inline]
+                fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+                    Ok(ToSqlOutput::from(self.to_wkb().map_err(|_| {
+                        rusqlite::Error::ToSqlConversionFailure(Box::new(Error::GeomEncodeError))
+                    })?))
+                }
+            }
+
+            impl FromSql for $t {
+                #[inline]
+                fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+                    let mut vec: Vec<u8> = value.as_blob().map(<[u8]>::to_vec)?;
+                    let slice = vec.as_mut_slice();
+                    let pt = <$t>::from_wkb(slice)
+                        .map_err(|_| rusqlite::types::FromSqlError::Other(Box::new(Error::GeomDecodeError)))?;
+                    Ok(pt)
+                }
+            }
+       )*
+    };
+}
+
+gpkg_sql_wkb! {
+    GPKGPoint,
+    // GPKGPolygon,
+    GPKGLineString
+}
+
+impl GeoPackageWKB for GPKGLineString {
+    fn to_wkb(&self) -> Result<Vec<u8>, wkb::WKBWriteError> {
+        let mut header: Vec<u8> = Vec::new();
+        // magic number that is GP in ASCII
+        header.extend_from_slice(&[0x47, 0x50]);
+        // version number, 0 means version 1
+        header.push(0);
+        let flags = 0b00000001;
+        header.push(flags);
+        let srs = i32::to_le_bytes(4326);
+        header.extend_from_slice(&srs);
+        let geom = wkb::geom_to_wkb(&(self.0.clone().into()))?;
+        header.extend(geom);
+        Ok(header)
+    }
+    fn from_wkb(bytes: &mut [u8]) -> Result<Self, wkb::WKBReadError> {
+        // for now we should just kinda ignore the header and just chew through it
+        // let magic = u16::from(wkb[0..2]);
+        let flags = GPKGGeomFlags::from_byte(bytes[3]);
+        let mut srs_bytes: [u8; 4] = Default::default();
+        srs_bytes.copy_from_slice(&bytes[4..8]);
+        let _srs = match flags.little_endian {
+            true => i32::from_le_bytes(srs_bytes),
+            false => i32::from_be_bytes(srs_bytes),
+        };
+        let envelope_length: usize = match flags.envelope {
+            EnvelopeType::Missing => 0,
+            EnvelopeType::XY => 32,
+            EnvelopeType::XYZ | EnvelopeType::XYM => 48,
+            EnvelopeType::XYZM => 64,
+        };
+
+        let geom_start = 8 + envelope_length;
+
+        let mut bytes_cursor = Cursor::new(&bytes[geom_start..]);
+
+        let geom = wkb::wkb_to_geom(&mut bytes_cursor)?;
+
+        Ok(GPKGLineString(geom.try_into().unwrap()))
     }
 }
 

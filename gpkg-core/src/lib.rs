@@ -2,6 +2,7 @@
 mod gpkg_wkb;
 mod sql;
 mod srs;
+mod types;
 use crate::sql::table_definitions::*;
 use crate::srs::{defaults::*, SpatialRefSys};
 use geo_types::coord;
@@ -124,16 +125,18 @@ mod tests {
 
     use geo_types::{LineString, Point};
 
+    use crate::gpkg_wkb::GPKGLineString;
+
     use super::*;
 
     #[derive(GPKGModel, Debug)]
     #[table_name = "test"]
     struct TestTable {
-        start_node: i64,
+        start_node: Option<i64>,
         end_node: i64,
         rev_cost: String,
-        // #[geom_field]
-        // geom: LineString<f64>,
+        #[geom_field]
+        geom: gpkg_wkb::GPKGLineString,
     }
 
     #[test]
@@ -142,10 +145,13 @@ mod tests {
         let db = GeoPackage::create(path).unwrap();
         TestTable::create_table(&db).expect("Problem creating table");
         let val = TestTable {
-            start_node: 42,
+            start_node: Some(42),
             end_node: 918,
             rev_cost: "Test values".to_owned(),
-            // geom: LineString::new(vec![coord!(x: 40.0, y:-105.0), coord!(x:41.0, y:-106.0)]),
+            geom: GPKGLineString(LineString::new(vec![
+                coord!(x: 40.0, y:-105.0),
+                coord!(x:41.0, y:-106.0),
+            ])),
         };
         val.insert_record(&db).unwrap();
         println!("{:?}", TestTable::get_first(&db));
