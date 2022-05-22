@@ -2,6 +2,6 @@
 # to be at the root level of the crate
 [workspace]
 members = [
-    "gpkg-core",
+    "gpkg",
     "gpkg-derive",
 ]
