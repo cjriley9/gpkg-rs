@@ -1,14 +1,12 @@
 #![allow(dead_code)]
-mod gpkg_wkb;
+pub mod gpkg_wkb;
 mod sql;
-mod srs;
-mod types;
+pub mod srs;
+pub mod types;
 use crate::sql::table_definitions::*;
 use crate::srs::{defaults::*, SpatialRefSys};
-use geo_types::coord;
 use geo_types::Polygon;
 pub use gpkg_derive::GPKGModel;
-use gpkg_wkb::GeoPackageWKB;
 use rusqlite::{params, Connection, DatabaseName, OpenFlags, Result};
 use std::path::Path;
 
@@ -123,9 +121,9 @@ impl GeoPackage {
 mod tests {
     use std::path::Path;
 
-    use geo_types::{LineString, Point};
+    use geo_types::{coord, LineString, Point, Polygon};
 
-    use crate::gpkg_wkb::GPKGLineString;
+    use crate::gpkg_wkb::{GPKGLineString, GPKGPolygon};
 
     use super::*;
 
@@ -136,7 +134,7 @@ mod tests {
         end_node: i64,
         rev_cost: String,
         #[geom_field]
-        geom: gpkg_wkb::GPKGLineString,
+        geom: gpkg_wkb::GPKGPolygon,
     }
 
     #[test]
@@ -148,10 +146,15 @@ mod tests {
             start_node: Some(42),
             end_node: 918,
             rev_cost: "Test values".to_owned(),
-            geom: GPKGLineString(LineString::new(vec![
-                coord!(x: 40.0, y:-105.0),
-                coord!(x:41.0, y:-106.0),
-            ])),
+            geom: GPKGPolygon(Polygon::new(
+                LineString::new(vec![
+                    coord!(x: 40.0, y:-105.0),
+                    coord!(x:41.0, y:-106.0),
+                    coord!(x:40.0, y:-106.0),
+                    coord!(x: 40.0, y:-105.0),
+                ]),
+                vec![],
+            )),
         };
         val.insert_record(&db).unwrap();
         println!("{:?}", TestTable::get_first(&db));

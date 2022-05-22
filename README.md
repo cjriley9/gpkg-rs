@@ -10,6 +10,7 @@ The goal of the crate is to adhere to the Geopackage [specification](https://www
 - [ ] Write 2D vector data
 - [ ] Read vector data with M and Z coordinates
 - [ ] Write vector data with M and Z coordinates
+- [ ] Support writing bounding boxes for geometries
 - [ ] Read image tile data 
 - [ ] Write image tile data 
 - [ ] GeoPackage Extension support
