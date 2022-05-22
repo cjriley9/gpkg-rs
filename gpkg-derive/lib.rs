@@ -432,7 +432,7 @@ mod test {
             struct StreetLight {
                 id: i64,
                 height: f64,
-                string_ref: Option<&'a str>,
+                string_ref: Option<String>,
                 buf_ref: &'a [u8],
                 // #[geom_field]
                 // geom: geo_types::Polygon<f64>,

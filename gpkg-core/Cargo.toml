@@ -11,3 +11,4 @@ geo-types = "*"
 gpkg-derive = { version = "*", path = "../gpkg-derive" }
 wkb = "0.7.1"
 thiserror = "1.0.31"
+byteorder = "1.4.3"

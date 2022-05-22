@@ -123,7 +123,10 @@ mod tests {
 
     use geo_types::{coord, LineString, Point, Polygon};
 
-    use crate::gpkg_wkb::{GPKGLineString, GPKGPolygon};
+    use crate::{
+        gpkg_wkb::{GPKGLineString, GPKGPolygon},
+        types::GPKGPointZ,
+    };
 
     use super::*;
 
@@ -134,7 +137,7 @@ mod tests {
         end_node: i64,
         rev_cost: String,
         #[geom_field]
-        geom: gpkg_wkb::GPKGPolygon,
+        geom: types::GPKGPointZ,
     }
 
     #[test]
@@ -146,15 +149,11 @@ mod tests {
             start_node: Some(42),
             end_node: 918,
             rev_cost: "Test values".to_owned(),
-            geom: GPKGPolygon(Polygon::new(
-                LineString::new(vec![
-                    coord!(x: 40.0, y:-105.0),
-                    coord!(x:41.0, y:-106.0),
-                    coord!(x:40.0, y:-106.0),
-                    coord!(x: 40.0, y:-105.0),
-                ]),
-                vec![],
-            )),
+            geom: GPKGPointZ {
+                x: 40.0,
+                y: -105.0,
+                z: 5280.0,
+            },
         };
         val.insert_record(&db).unwrap();
         println!("{:?}", TestTable::get_first(&db));
