@@ -20,6 +20,7 @@ pub trait GPKGModel<'a>: Sized {
     fn insert_record(&self, gpkg: &GeoPackage) -> Result<()>;
     fn get_first(gpkg: &GeoPackage) -> Result<Option<Self>>;
     fn get_all(gpkg: &GeoPackage) -> Result<Vec<Self>>;
+    fn get_where(gpkg: &GeoPackage, predicate: &str) -> Result<Vec<Self>>;
 }
 
 struct ATestTable<'a> {
@@ -177,9 +178,27 @@ mod tests {
                 },
             ]),
         };
+        let val3 = TestTable {
+            start_node: Some(48),
+            end_node: 918,
+            rev_cost: "Test values".to_owned(),
+            geom: GPKGLineStringZ(vec![
+                GPKGPointZ {
+                    x: 40.0,
+                    y: -105.0,
+                    z: 5280.0,
+                },
+                GPKGPointZ {
+                    x: 41.0,
+                    y: -106.0,
+                    z: 5280.0,
+                },
+            ]),
+        };
         val.insert_record(&db).unwrap();
         val2.insert_record(&db).unwrap();
-        println!("{:?}", TestTable::get_all(&db));
+        val3.insert_record(&db).unwrap();
+        println!("{:?}", TestTable::get_where(&db, "start_node > 50"));
 
         db.close();
         GeoPackage::open(path).unwrap();

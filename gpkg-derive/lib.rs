@@ -240,7 +240,6 @@ fn impl_model(
             let field_name = f.ident.as_ref().expect("Expected named field").to_string();
             let type_name: String;
             let is_geom_field = is_geom_field(&f);
-            dbg!(is_geom_field);
             match &f.ty {
                 syn::Type::Reference(r) => {
                     type_name = get_reference_type_name(r);
@@ -413,6 +412,24 @@ fn impl_model(
                     std::stringify!(
                         SELECT #(#column_names),* FROM #table_name_final;
                     )
+                )?;
+                let mut out_vec = Vec::new();
+                let rows = stmt.query_map([], |row| {
+                    Ok(Self {
+                        #(#column_names: row.get((#column_nums))?,)*
+                    })
+                })?;
+                for r in rows {
+                    out_vec.push(r?)
+                }
+                Ok(out_vec)
+            }
+
+            fn get_where(gpkg: &GeoPackage, predicate: &str) -> Result<Vec<Self>, rusqlite::Error> {
+                let mut stmt = gpkg.conn.prepare(
+                    (std::stringify!(
+                        SELECT #(#column_names),* FROM #table_name_final WHERE
+                    ).to_owned() + " " + predicate + ";").as_str()
                 )?;
                 let mut out_vec = Vec::new();
                 let rows = stmt.query_map([], |row| {

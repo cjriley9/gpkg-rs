@@ -45,7 +45,6 @@ impl GPKGLineStringZ {
     pub fn write_as_bytes(&self, w: &mut impl Write) -> Result<(), wkb::WKBWriteError> {
         w.write_u32::<LittleEndian>(self.0.len() as u32)?;
         for p in &self.0 {
-            dbg!(p);
             p.write_as_bytes(w)?
         }
         Ok(())
