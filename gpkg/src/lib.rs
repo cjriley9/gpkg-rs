@@ -6,37 +6,80 @@ pub mod types;
 use crate::sql::table_definitions::*;
 use crate::srs::{defaults::*, SpatialRefSys};
 use geo_types::Polygon;
+#[doc(inline)]
 pub use gpkg_derive::GPKGModel;
 use rusqlite::{params, Connection, DatabaseName, OpenFlags, Result};
 use std::path::Path;
 
+/// A GeoPackage, upon creation, the necessary tables for conformance to the specification are created,
+/// and validation is performed upon opening.
 pub struct GeoPackage {
+    /// The underlying rusqlite connection for the GeoPackage
+    ///
+    /// Access is provided here to allow a user to do what is necessary for their specific use case,
+    /// but extra care should be taken if using this for write operations, since the
+    /// integrity of the GeoPackage could be compromised.
     pub conn: Connection,
     tables: Vec<TableDefinition>,
 }
 
+/// A trait that allows for easy writes and reads of a struct into a GeoPackage.
+/// Currently usable only for vector features and attribute only data.
 pub trait GPKGModel<'a>: Sized {
+    /// Creates a table and the associated metadata within the GeoPackage
     fn create_table(gpkg: &GeoPackage) -> Result<()>;
+    /// Insert a single record into the corresponding table for the type.
     fn insert_record(&self, gpkg: &GeoPackage) -> Result<()>;
+    /// Fetch a single record from the table containing items of this type.
     fn get_first(gpkg: &GeoPackage) -> Result<Option<Self>>;
+    /// Fetch all records from the table containing items of this type.
     fn get_all(gpkg: &GeoPackage) -> Result<Vec<Self>>;
+    /// Fetch all records from the table containing items of this type that
+    /// match the given predicate.
+    /// # Examples
+    /// ```
+    /// struct Item {
+    ///     length: f64,
+    /// }
+    ///
+    /// let records: Vec<Item> = Item::get_where(&db, "length > 10.0").unwrap();
+    ///
+    /// for r in records {
+    ///     assert!(r.length > 10.0);
+    /// }
+    /// ```
     fn get_where(gpkg: &GeoPackage, predicate: &str) -> Result<Vec<Self>>;
 }
 
-struct ATestTable<'a> {
-    start_node: i64,
-    end_node: i64,
-    for_cost: f64,
-    rev_cost: &'a [u8],
-    geom: Polygon<f64>,
+#[derive(Debug)]
+pub enum GPKGDataType {
+    Features,
+    Attributes,
 }
 
+#[derive(Debug)]
 struct TableDefinition {
     name: String,
+    data_type: GPKGDataType,
+    srs_id: Option<i64>,
+    identifier: String,
+    description: String,
 }
 
 impl GeoPackage {
-    // creates an empty geopackage that conforms to the spec
+    /// Creates an empty geopackage with the following metadata tables:
+    /// * gpkg_extensions
+    /// * gpkg_contents
+    /// * gpkg_geometry_columns
+    /// * gpkg_spatial_ref_sys
+    /// * gpkg_tile_matrix
+    /// * gpkg_tile_matrix_set
+    ///
+    /// # Examples
+    /// ```
+    /// let path = Path::new("./test.gpkg");
+    /// let gp = GeoPackage::create(path).unwrap();
+    /// ```
     pub fn create<P: AsRef<Path>>(path: P) -> Result<GeoPackage> {
         let conn = Connection::open(path)?;
         let gpkg = GeoPackage {
@@ -62,7 +105,7 @@ impl GeoPackage {
         Ok(gpkg)
     }
 
-    pub fn new_srs(&self, srs: &SpatialRefSys) -> Result<()> {
+    fn new_srs(&self, srs: &SpatialRefSys) -> Result<()> {
         const STMT: &str = "INSERT INTO gpkg_spatial_ref_sys VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
         self.conn.execute(
             STMT,
@@ -78,14 +121,19 @@ impl GeoPackage {
         Ok(())
     }
 
-    // fn create_table(&self, def: &TableDefinition) -> Result<()> {
-    //     todo!()
-    // }
-
+    /// Close the geopackage
+    /// # Examples
+    /// ```
+    /// let path = Path::new("./test.gpkg");
+    /// let gp = GeoPackage::create(path).unwrap();
+    /// // do some things with the GeoPackage
+    /// gp.close();
+    /// ```
     pub fn close(self) {
         self.conn.close().unwrap();
     }
 
+    /// Open a geopackage, doing validation of the GeoPackage internals to ensure that operation will work correctly.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<GeoPackage> {
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         // check the user application_id and user_version as per requirement 2

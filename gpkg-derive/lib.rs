@@ -34,6 +34,20 @@ const GEO_TYPES: &'static [&'static str] = &[
     "GPKGMultiPointZM",
 ];
 
+/// A macro for deriving an implementation of GPKGModel for a struct. If no
+///
+/// # Usage
+/// ```
+/// #[derive(GPKGModel)]
+/// #[table_name = "test_table"]
+/// struct TestTable {
+///     field1: i64,
+///     field2: i32,
+///     #[geom_field]
+///     shape: GPKGPoint,
+/// }
+///
+/// TestTable::create_table(&gp).unwrap();
 #[proc_macro_derive(GPKGModel, attributes(table_name, geom_field))]
 pub fn derive_gpkg(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let inner_input = proc_macro2::TokenStream::from(input);

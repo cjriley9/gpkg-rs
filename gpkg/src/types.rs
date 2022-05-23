@@ -10,6 +10,8 @@ pub enum Error {
     GeomEncodeError,
     #[error("Unsupported WKB geometry type")]
     UnsupportedGeometryType,
+    #[error("Error when accessing the SQLite database")]
+    SQLiteError(#[from] rusqlite::Error),
 }
 
 #[derive(Debug)]
