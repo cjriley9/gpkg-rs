@@ -37,7 +37,7 @@ const GEO_TYPES: &'static [&'static str] = &[
 /// A macro for deriving an implementation of GPKGModel for a struct. If no
 ///
 /// # Usage
-/// ```
+/// ```ignore
 /// #[derive(GPKGModel)]
 /// #[table_name = "test_table"]
 /// struct TestTable {
@@ -363,6 +363,7 @@ fn impl_model(
             quote!(self.#name_ident)
         })
         .collect();
+
     let column_nums = (0..column_defs.len())
         .map(|i| LitInt::new(i.to_string().as_str(), Span::call_site()))
         .collect::<Vec<LitInt>>();
@@ -401,6 +402,31 @@ fn impl_model(
                         #(#column_params),*
                     ]
                 )?;
+                Ok(())
+            }
+
+            fn insert_many(gpkg: &mut GeoPackage, records: &Vec<Self>) -> rusqlite::Result<()> {
+                let sql =
+                    std::stringify!(
+                        INSERT INTO #table_name_final (
+                            #(#column_names),*
+                        ) VALUES (
+                            #(#params),*
+                        )
+                    );
+                let tx = gpkg.conn.transaction()?;
+                // extra block is here so that stmt gets dropped
+                {
+                    let mut stmt = tx.prepare(sql)?;
+                    for record in records {
+                        stmt.execute(
+                            rusqlite::params![
+                                #(record.#column_names),*
+                            ]
+                        )?;
+                    }
+                }
+                tx.commit()?;
                 Ok(())
             }
 
@@ -488,7 +514,6 @@ mod test {
                 buf_ref: &'a [u8],
                 #[geom_field]
                 geom: GPKGLineStringZ,
-                // test_blob: [u8],
             }
         );
         println!("{}", derive_gpkg_inner(tstream.into()));

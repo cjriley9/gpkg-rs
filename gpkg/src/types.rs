@@ -53,7 +53,6 @@ impl GPKGLineStringZ {
     }
     pub fn read_from_bytes<T: ByteOrder, U: Read>(r: &mut U) -> Result<Self, WKBReadError> {
         let num_points = r.read_u32::<T>()?;
-        dbg!(num_points);
         let mut out_vec: Vec<GPKGPointZ> = Vec::new();
         for _ in 0..num_points {
             out_vec.push(GPKGPointZ::read_from_bytes::<T, _>(r)?);

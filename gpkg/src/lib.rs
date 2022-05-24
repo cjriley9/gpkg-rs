@@ -28,16 +28,23 @@ pub struct GeoPackage {
 pub trait GPKGModel<'a>: Sized {
     /// Creates a table and the associated metadata within the GeoPackage
     fn create_table(gpkg: &GeoPackage) -> Result<()>;
+
     /// Insert a single record into the corresponding table for the type.
     fn insert_record(&self, gpkg: &GeoPackage) -> Result<()>;
+
+    // Insert a vector of records into the corresponding layer of the geopackage
+    fn insert_many(gpkg: &mut GeoPackage, records: &Vec<Self>) -> Result<()>;
+
     /// Fetch a single record from the table containing items of this type.
     fn get_first(gpkg: &GeoPackage) -> Result<Option<Self>>;
+
     /// Fetch all records from the table containing items of this type.
     fn get_all(gpkg: &GeoPackage) -> Result<Vec<Self>>;
+
     /// Fetch all records from the table containing items of this type that
     /// match the given predicate.
     /// # Examples
-    /// ```
+    /// ```ignore
     /// struct Item {
     ///     length: f64,
     /// }
@@ -76,7 +83,8 @@ impl GeoPackage {
     /// * gpkg_tile_matrix_set
     ///
     /// # Examples
-    /// ```
+    /// ```ignore
+    /// # use std::path::Path;
     /// let path = Path::new("./test.gpkg");
     /// let gp = GeoPackage::create(path).unwrap();
     /// ```
@@ -123,7 +131,8 @@ impl GeoPackage {
 
     /// Close the geopackage
     /// # Examples
-    /// ```
+    /// ```ignore
+    /// # use std::path::Path;
     /// let path = Path::new("./test.gpkg");
     /// let gp = GeoPackage::create(path).unwrap();
     /// // do some things with the GeoPackage
@@ -169,7 +178,9 @@ impl GeoPackage {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::path::Path;
+    use tempfile::{tempdir, TempDir};
 
     use geo_types::{coord, LineString, Point, Polygon};
 
@@ -179,7 +190,7 @@ mod tests {
 
     #[derive(GPKGModel, Debug)]
     #[table_name = "test"]
-    struct TestTable {
+    struct TestTableGeom {
         start_node: Option<i64>,
         end_node: i64,
         rev_cost: String,
@@ -187,12 +198,61 @@ mod tests {
         geom: types::GPKGLineStringZ,
     }
 
+    #[derive(GPKGModel, Debug, PartialEq, Eq)]
+    #[table_name = "test"]
+    struct TestTableAttr {
+        field1: Option<i64>,
+        field2: i64,
+        field3: String,
+    }
+
     #[test]
-    fn new_gpkg() {
-        let path = Path::new("../test_data/create.gpkg");
-        let db = GeoPackage::create(path).unwrap();
-        TestTable::create_table(&db).expect("Problem creating table");
-        let val = TestTable {
+    fn create_table() {
+        let dir = tempdir().unwrap();
+        let filename = dir.path().join("create.gpkg");
+
+        let gp = GeoPackage::create(&filename).unwrap();
+        TestTableGeom::create_table(&gp).unwrap();
+
+        // how do we get a check that the table exists?
+        // make sure that we've got something in gpkg_contents
+
+        gp.close();
+        fs::remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn insert_row() {
+        let dir = tempdir().unwrap();
+        let filename = dir.path().join("create.gpkg");
+
+        let test_val = TestTableAttr {
+            field1: Some(999),
+            field2: 420,
+            field3: String::from("blah"),
+        };
+
+        let gp = GeoPackage::create(&filename).unwrap();
+        TestTableAttr::create_table(&gp).unwrap();
+        test_val.insert_record(&gp).unwrap();
+
+        // how do we get a check that the table exists?
+        // make sure that we've got something in gpkg_contents
+        let retrieved = TestTableAttr::get_first(&gp).unwrap().unwrap();
+
+        assert_eq!(test_val, retrieved);
+
+        gp.close();
+        fs::remove_file(filename).unwrap();
+    }
+
+    #[test]
+    fn insert_many() {
+        let dir = tempdir().unwrap();
+        let filename = dir.path().join("insert_many.gpkg");
+        let mut db = GeoPackage::create(&filename).unwrap();
+        TestTableGeom::create_table(&db).expect("Problem creating table");
+        let val = TestTableGeom {
             start_node: Some(42),
             end_node: 918,
             rev_cost: "Test values".to_owned(),
@@ -209,7 +269,7 @@ mod tests {
                 },
             ]),
         };
-        let val2 = TestTable {
+        let val2 = TestTableGeom {
             start_node: Some(45),
             end_node: 918,
             rev_cost: "Test values".to_owned(),
@@ -226,7 +286,7 @@ mod tests {
                 },
             ]),
         };
-        let val3 = TestTable {
+        let val3 = TestTableGeom {
             start_node: Some(48),
             end_node: 918,
             rev_cost: "Test values".to_owned(),
@@ -243,15 +303,12 @@ mod tests {
                 },
             ]),
         };
-        val.insert_record(&db).unwrap();
-        val2.insert_record(&db).unwrap();
-        val3.insert_record(&db).unwrap();
-        println!("{:?}", TestTable::get_where(&db, "start_node > 50"));
+        let vec_for_insert = vec![val, val2, val3];
+        TestTableGeom::insert_many(&mut db, &vec_for_insert).unwrap();
 
         db.close();
-        GeoPackage::open(path).unwrap();
-
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+        let db2 = GeoPackage::open(&filename).unwrap();
+        let retrieved = TestTableGeom::get_all(&db2).unwrap();
+        assert!(retrieved.len() == vec_for_insert.len());
     }
 }
