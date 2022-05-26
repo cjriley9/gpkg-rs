@@ -372,99 +372,6 @@ fn impl_model(
     // this is so that lifetimes will work
     let new = quote!(
         impl GPKGModel <'_> for #name #final_generics {
-            fn create_table(gpkg: &GeoPackage) -> rusqlite::Result<()> {
-                return gpkg.conn.execute_batch(
-                    std::stringify!(
-                        BEGIN;
-                        CREATE TABLE #table_name_final (
-                            object_id INTEGER PRIMARY KEY,
-                            #(#column_defs ),*
-                        );
-                        #geom_column_ts
-                        #contents_ts
-                        COMMIT;
-                    )
-                )
-            }
-
-            fn insert_record(&self, gpkg: &GeoPackage) -> rusqlite::Result<()> {
-                let sql =
-                    std::stringify!(
-                        INSERT INTO #table_name_final (
-                            #(#column_names),*
-                        ) VALUES (
-                            #(#params),*
-                        )
-                    );
-                gpkg.conn.execute(
-                    sql,
-                    rusqlite::params![
-                        #(#column_params),*
-                    ]
-                )?;
-                Ok(())
-            }
-
-            fn insert_many(gpkg: &mut GeoPackage, records: &Vec<Self>) -> rusqlite::Result<()> {
-                let sql =
-                    std::stringify!(
-                        INSERT INTO #table_name_final (
-                            #(#column_names),*
-                        ) VALUES (
-                            #(#params),*
-                        )
-                    );
-                let tx = gpkg.conn.transaction()?;
-                // extra block is here so that stmt gets dropped
-                {
-                    let mut stmt = tx.prepare(sql)?;
-                    for record in records {
-                        stmt.execute(
-                            rusqlite::params![
-                                #(record.#column_names),*
-                            ]
-                        )?;
-                    }
-                }
-                tx.commit()?;
-                Ok(())
-            }
-
-            fn get_first(gpkg: &GeoPackage) -> Result<Option<Self>, rusqlite::Error> {
-                let mut stmt = gpkg.conn.prepare(
-                    std::stringify!(
-                        SELECT #(#column_names),* FROM #table_name_final;
-                    )
-                )?;
-                let mut rows = stmt.query([])?;
-                if let Some(row) = rows.next()? {
-                    Ok(Some(Self {
-                        #(#column_names: row.get((#column_nums))?,)*
-                    }))
-                }
-                else {
-                    Ok(None)
-                }
-            }
-
-            fn get_all(gpkg: &GeoPackage) -> Result<Vec<Self>, rusqlite::Error> {
-                let mut stmt = gpkg.conn.prepare(
-                    std::stringify!(
-                        SELECT #(#column_names),* FROM #table_name_final;
-                    )
-                )?;
-                let mut out_vec = Vec::new();
-                let rows = stmt.query_map([], |row| {
-                    Ok(Self {
-                        #(#column_names: row.get((#column_nums))?,)*
-                    })
-                })?;
-                for r in rows {
-                    out_vec.push(r?)
-                }
-                Ok(out_vec)
-            }
-
             fn get_where(gpkg: &GeoPackage, predicate: &str) -> Result<Vec<Self>, rusqlite::Error> {
                 let mut stmt = gpkg.conn.prepare(
                     (std::stringify!(
@@ -481,6 +388,47 @@ fn impl_model(
                     out_vec.push(r?)
                 }
                 Ok(out_vec)
+            }
+
+            fn get_create_sql() -> &'static str {
+                std::stringify!(
+                    BEGIN;
+                    CREATE TABLE #table_name_final (
+                        object_id INTEGER PRIMARY KEY,
+                        #(#column_defs ),*
+                    );
+                    #geom_column_ts
+                    #contents_ts
+                    COMMIT;
+                )
+            }
+
+            fn get_insert_sql() -> &'static str {
+                std::stringify!(
+                    INSERT INTO #table_name_final (
+                        #(#column_names),*
+                    ) VALUES (
+                        #(#params),*
+                    )
+                )
+            }
+
+            fn get_select_sql() -> &'static str {
+                std::stringify!(
+                    SELECT #(#column_names),* FROM #table_name_final;
+                )
+            }
+
+            fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+                Ok(Self {
+                    #(#column_names: row.get((#column_nums))?,)*
+                })
+            }
+
+            fn as_params(&self) -> Vec<&(dyn rusqlite::ToSql + '_)> {
+                vec![
+                    #(&self.#column_names as &dyn rusqlite::ToSql),*
+                ]
             }
         }
     );

@@ -26,21 +26,6 @@ pub struct GeoPackage {
 /// A trait that allows for easy writes and reads of a struct into a GeoPackage.
 /// Currently usable only for vector features and attribute only data.
 pub trait GPKGModel<'a>: Sized {
-    /// Creates a table and the associated metadata within the GeoPackage
-    fn create_table(gpkg: &GeoPackage) -> Result<()>;
-
-    /// Insert a single record into the corresponding table for the type.
-    fn insert_record(&self, gpkg: &GeoPackage) -> Result<()>;
-
-    // Insert a vector of records into the corresponding layer of the geopackage
-    fn insert_many(gpkg: &mut GeoPackage, records: &Vec<Self>) -> Result<()>;
-
-    /// Fetch a single record from the table containing items of this type.
-    fn get_first(gpkg: &GeoPackage) -> Result<Option<Self>>;
-
-    /// Fetch all records from the table containing items of this type.
-    fn get_all(gpkg: &GeoPackage) -> Result<Vec<Self>>;
-
     /// Fetch all records from the table containing items of this type that
     /// match the given predicate.
     /// # Examples
@@ -56,6 +41,16 @@ pub trait GPKGModel<'a>: Sized {
     /// }
     /// ```
     fn get_where(gpkg: &GeoPackage, predicate: &str) -> Result<Vec<Self>>;
+
+    fn get_create_sql() -> &'static str;
+
+    fn get_insert_sql() -> &'static str;
+
+    fn get_select_sql() -> &'static str;
+
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self>;
+
+    fn as_params(&self) -> Vec<&(dyn rusqlite::ToSql + '_)>;
 }
 
 #[derive(Debug)]
@@ -111,6 +106,40 @@ impl GeoPackage {
         gpkg.conn.execute(CREATE_TILE_MATRIX_TABLE, [])?;
         gpkg.conn.execute(CREATE_TILE_MATRIX_SET_TABLE, [])?;
         Ok(gpkg)
+    }
+
+    fn create_layer<'a, T: GPKGModel<'a>>(&self) -> rusqlite::Result<()> {
+        self.conn.execute_batch(T::get_create_sql())
+    }
+
+    fn insert_record<'a, T: GPKGModel<'a>>(&self, record: &T) -> rusqlite::Result<()> {
+        let sql = T::get_insert_sql();
+        self.conn.execute(sql, record.as_params().as_slice())?;
+        Ok(())
+    }
+
+    fn insert_many<'a, T: GPKGModel<'a>>(&mut self, records: &Vec<T>) -> rusqlite::Result<()> {
+        let sql = T::get_insert_sql();
+        let tx = self.conn.transaction()?;
+        // extra block is here so that stmt gets dropped
+        {
+            let mut stmt = tx.prepare(sql)?;
+            for record in records {
+                stmt.execute(record.as_params().as_slice())?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    fn get_all<'a, T: GPKGModel<'a>>(&self) -> rusqlite::Result<Vec<T>> {
+        let mut stmt = self.conn.prepare(T::get_select_sql())?;
+        let mut out_vec = Vec::new();
+        let rows = stmt.query_map([], |row| T::from_row(row))?;
+        for r in rows {
+            out_vec.push(r?)
+        }
+        Ok(out_vec)
     }
 
     fn new_srs(&self, srs: &SpatialRefSys) -> Result<()> {
@@ -182,8 +211,6 @@ mod tests {
     use std::path::Path;
     use tempfile::{tempdir, TempDir};
 
-    use geo_types::{coord, LineString, Point, Polygon};
-
     use crate::types::*;
 
     use super::*;
@@ -212,7 +239,7 @@ mod tests {
         let filename = dir.path().join("create.gpkg");
 
         let gp = GeoPackage::create(&filename).unwrap();
-        TestTableGeom::create_table(&gp).unwrap();
+        gp.create_layer::<TestTableGeom>().unwrap();
 
         // how do we get a check that the table exists?
         // make sure that we've got something in gpkg_contents
@@ -233,14 +260,14 @@ mod tests {
         };
 
         let gp = GeoPackage::create(&filename).unwrap();
-        TestTableAttr::create_table(&gp).unwrap();
-        test_val.insert_record(&gp).unwrap();
+        gp.create_layer::<TestTableAttr>().unwrap();
+        gp.insert_record(&test_val).unwrap();
 
         // how do we get a check that the table exists?
         // make sure that we've got something in gpkg_contents
-        let retrieved = TestTableAttr::get_first(&gp).unwrap().unwrap();
+        let retrieved = &gp.get_all::<TestTableAttr>().unwrap();
 
-        assert_eq!(test_val, retrieved);
+        assert_eq!(test_val, retrieved[0]);
 
         gp.close();
         fs::remove_file(filename).unwrap();
@@ -250,8 +277,9 @@ mod tests {
     fn insert_many() {
         let dir = tempdir().unwrap();
         let filename = dir.path().join("insert_many.gpkg");
-        let mut db = GeoPackage::create(&filename).unwrap();
-        TestTableGeom::create_table(&db).expect("Problem creating table");
+        let mut gp = GeoPackage::create(&filename).unwrap();
+        gp.create_layer::<TestTableGeom>()
+            .expect("Problem creating table");
         let val = TestTableGeom {
             start_node: Some(42),
             end_node: 918,
@@ -304,11 +332,11 @@ mod tests {
             ]),
         };
         let vec_for_insert = vec![val, val2, val3];
-        TestTableGeom::insert_many(&mut db, &vec_for_insert).unwrap();
+        gp.insert_many(&vec_for_insert).unwrap();
 
-        db.close();
+        gp.close();
         let db2 = GeoPackage::open(&filename).unwrap();
-        let retrieved = TestTableGeom::get_all(&db2).unwrap();
+        let retrieved = db2.get_all::<TestTableGeom>().unwrap();
         assert!(retrieved.len() == vec_for_insert.len());
     }
 }
