@@ -8,7 +8,7 @@ pub struct SpatialRefSys<'a> {
     pub description: &'a str,
 }
 
-pub mod defaults {
+pub(crate) mod defaults {
     use super::SpatialRefSys;
     pub const WGS84: SpatialRefSys = SpatialRefSys {
         name: "WGS 84 geodetic",

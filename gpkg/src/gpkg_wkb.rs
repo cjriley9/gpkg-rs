@@ -5,7 +5,9 @@ use std::convert::Into;
 use std::io::Cursor;
 use wkb::WKBAbleExt;
 
-/// A trait containing method for encoding geometries according to the GeoPackage [specifcation](https://www.geopackage.org/spec130/#gpb_spec)
+/// A trait containing methods for encoding geometries according to the GeoPackage [specifcation](https://www.geopackage.org/spec130/#gpb_spec)
+///
+/// This trait allows for an easier implementation of the rusqlite [ToSql] and [FromSql] traits needed to read and write geometries to a GeoPackage
 pub trait GeoPackageWKB: Sized {
     fn to_wkb(&self) -> Result<Vec<u8>, wkb::WKBWriteError>;
     fn from_wkb(wkb: &mut [u8]) -> Result<Self, wkb::WKBReadError>;
