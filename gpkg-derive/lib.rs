@@ -390,6 +390,10 @@ fn impl_model(
                 Ok(out_vec)
             }
 
+            fn get_gpkg_table_name() -> &'static str {
+                std::stringify!(#table_name_final)
+            }
+
             fn get_create_sql() -> &'static str {
                 std::stringify!(
                     BEGIN;
@@ -417,6 +421,12 @@ fn impl_model(
                 std::stringify!(
                     SELECT #(#column_names),* FROM #table_name_final;
                 )
+            }
+
+            fn get_select_where(predicate: &str) -> String {
+                (std::stringify!(
+                    SELECT #(#column_names),* FROM #table_name_final WHERE
+                ).to_owned() + " " + predicate + ";")
             }
 
             fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {

@@ -26,20 +26,6 @@ pub struct GeoPackage {
 /// A trait that allows for easy writes and reads of a struct into a GeoPackage.
 /// Currently usable only for vector features and attribute only data.
 pub trait GPKGModel<'a>: Sized {
-    /// Fetch all records from the table containing items of this type that
-    /// match the given predicate.
-    /// # Examples
-    /// ```ignore
-    /// struct Item {
-    ///     length: f64,
-    /// }
-    ///
-    /// let records: Vec<Item> = Item::get_where(&db, "length > 10.0").unwrap();
-    ///
-    /// for r in records {
-    ///     assert!(r.length > 10.0);
-    /// }
-    /// ```
     fn get_where(gpkg: &GeoPackage, predicate: &str) -> Result<Vec<Self>>;
 
     fn get_create_sql() -> &'static str;
@@ -48,9 +34,13 @@ pub trait GPKGModel<'a>: Sized {
 
     fn get_select_sql() -> &'static str;
 
+    fn get_select_where(predicate: &str) -> String;
+
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self>;
 
     fn as_params(&self) -> Vec<&(dyn rusqlite::ToSql + '_)>;
+
+    fn get_gpkg_table_name() -> &'static str;
 }
 
 #[derive(Debug)]
@@ -134,6 +124,30 @@ impl GeoPackage {
 
     fn get_all<'a, T: GPKGModel<'a>>(&self) -> rusqlite::Result<Vec<T>> {
         let mut stmt = self.conn.prepare(T::get_select_sql())?;
+        let mut out_vec = Vec::new();
+        let rows = stmt.query_map([], |row| T::from_row(row))?;
+        for r in rows {
+            out_vec.push(r?)
+        }
+        Ok(out_vec)
+    }
+
+    /// Fetch all records from the table containing items of this type that
+    /// match the given predicate.
+    /// # Examples
+    /// ```ignore
+    /// struct Item {
+    ///     length: f64,
+    /// }
+    ///
+    /// let records: Vec<Item> = gp.get_where::<Item>("length > 10.0").unwrap();
+    ///
+    /// for r in records {
+    ///     assert!(r.length > 10.0);
+    /// }
+    /// ```
+    fn get_where<'a, T: GPKGModel<'a>>(&self, predicate: &str) -> rusqlite::Result<Vec<T>> {
+        let mut stmt = self.conn.prepare(T::get_select_where(predicate).as_str())?;
         let mut out_vec = Vec::new();
         let rows = stmt.query_map([], |row| T::from_row(row))?;
         for r in rows {
