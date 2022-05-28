@@ -1,6 +1,10 @@
 use byteorder::{BigEndian, ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{Read, Write};
+use std::result;
 use wkb::WKBReadError;
+
+/// A typedef of the result returned by many methods.
+pub type Result<T, E = Error> = result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -12,6 +16,8 @@ pub enum Error {
     UnsupportedGeometryType,
     #[error("Error when accessing the SQLite database")]
     SQLiteError(#[from] rusqlite::Error),
+    #[error("Tried to create a geopackage that already exists")]
+    CreateExistingError,
 }
 
 #[derive(Debug)]

@@ -8,8 +8,9 @@ use crate::srs::{defaults::*, SpatialRefSys};
 use geo_types::Polygon;
 #[doc(inline)]
 pub use gpkg_derive::GPKGModel;
-use rusqlite::{params, Connection, DatabaseName, OpenFlags, Result};
+use rusqlite::{params, Connection, DatabaseName, OpenFlags};
 use std::path::Path;
+use types::{Error, Result};
 
 /// A GeoPackage, upon creation, the necessary tables for conformance to the specification are created,
 /// and validation is performed upon opening.
@@ -26,8 +27,6 @@ pub struct GeoPackage {
 /// A trait that allows for easy writes and reads of a struct into a GeoPackage.
 /// Currently usable only for vector features and attribute only data.
 pub trait GPKGModel<'a>: Sized {
-    fn get_where(gpkg: &GeoPackage, predicate: &str) -> Result<Vec<Self>>;
-
     fn get_create_sql() -> &'static str;
 
     fn get_insert_sql() -> &'static str;
@@ -74,6 +73,9 @@ impl GeoPackage {
     /// let gp = GeoPackage::create(path).unwrap();
     /// ```
     pub fn create<P: AsRef<Path>>(path: P) -> Result<GeoPackage> {
+        if path.as_ref().exists() {
+            return Err(Error::CreateExistingError);
+        }
         let conn = Connection::open(path)?;
         let gpkg = GeoPackage {
             conn,
@@ -98,17 +100,18 @@ impl GeoPackage {
         Ok(gpkg)
     }
 
-    fn create_layer<'a, T: GPKGModel<'a>>(&self) -> rusqlite::Result<()> {
-        self.conn.execute_batch(T::get_create_sql())
+    fn create_layer<'a, T: GPKGModel<'a>>(&self) -> Result<()> {
+        self.conn.execute_batch(T::get_create_sql())?;
+        Ok(())
     }
 
-    fn insert_record<'a, T: GPKGModel<'a>>(&self, record: &T) -> rusqlite::Result<()> {
+    fn insert_record<'a, T: GPKGModel<'a>>(&self, record: &T) -> Result<()> {
         let sql = T::get_insert_sql();
         self.conn.execute(sql, record.as_params().as_slice())?;
         Ok(())
     }
 
-    fn insert_many<'a, T: GPKGModel<'a>>(&mut self, records: &Vec<T>) -> rusqlite::Result<()> {
+    fn insert_many<'a, T: GPKGModel<'a>>(&mut self, records: &Vec<T>) -> Result<()> {
         let sql = T::get_insert_sql();
         let tx = self.conn.transaction()?;
         // extra block is here so that stmt gets dropped
@@ -122,7 +125,7 @@ impl GeoPackage {
         Ok(())
     }
 
-    fn get_all<'a, T: GPKGModel<'a>>(&self) -> rusqlite::Result<Vec<T>> {
+    fn get_all<'a, T: GPKGModel<'a>>(&self) -> Result<Vec<T>> {
         let mut stmt = self.conn.prepare(T::get_select_sql())?;
         let mut out_vec = Vec::new();
         let rows = stmt.query_map([], |row| T::from_row(row))?;
@@ -146,7 +149,7 @@ impl GeoPackage {
     ///     assert!(r.length > 10.0);
     /// }
     /// ```
-    fn get_where<'a, T: GPKGModel<'a>>(&self, predicate: &str) -> rusqlite::Result<Vec<T>> {
+    fn get_where<'a, T: GPKGModel<'a>>(&self, predicate: &str) -> crate::Result<Vec<T>> {
         let mut stmt = self.conn.prepare(T::get_select_where(predicate).as_str())?;
         let mut out_vec = Vec::new();
         let rows = stmt.query_map([], |row| T::from_row(row))?;
@@ -156,7 +159,8 @@ impl GeoPackage {
         Ok(out_vec)
     }
 
-    fn new_srs(&self, srs: &SpatialRefSys) -> Result<()> {
+    /// Add a new spatial reference system to the geopackage
+    pub fn new_srs(&self, srs: &SpatialRefSys) -> Result<()> {
         const STMT: &str = "INSERT INTO gpkg_spatial_ref_sys VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
         self.conn.execute(
             STMT,
@@ -169,6 +173,20 @@ impl GeoPackage {
                 srs.description,
             ],
         )?;
+        Ok(())
+    }
+
+    fn update_layer_srs_id(&mut self, table_name: &str, srs_id: i64) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE gpkg_contents SET srs_id = ?1 WHERE table_name = ?2",
+            params![srs_id, table_name],
+        )?;
+        tx.execute(
+            "UPDATE gpkg_geometry_columns SET srs_id = ?1 WHERE table_name = ?2",
+            params![srs_id, table_name],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -259,6 +277,25 @@ mod tests {
         // make sure that we've got something in gpkg_contents
 
         gp.close();
+        fs::remove_file(filename).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_on_existing() {
+        let dir = tempdir().unwrap();
+        let filename = dir.path().join("fail_exists.gpkg");
+
+        let gp = GeoPackage::create(&filename).unwrap();
+        gp.create_layer::<TestTableGeom>().unwrap();
+
+        // how do we get a check that the table exists?
+        // make sure that we've got something in gpkg_contents
+
+        gp.close();
+
+        let _shouldnt_open = GeoPackage::create(&filename).unwrap();
+
         fs::remove_file(filename).unwrap();
     }
 

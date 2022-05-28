@@ -372,24 +372,6 @@ fn impl_model(
     // this is so that lifetimes will work
     let new = quote!(
         impl GPKGModel <'_> for #name #final_generics {
-            fn get_where(gpkg: &GeoPackage, predicate: &str) -> Result<Vec<Self>, rusqlite::Error> {
-                let mut stmt = gpkg.conn.prepare(
-                    (std::stringify!(
-                        SELECT #(#column_names),* FROM #table_name_final WHERE
-                    ).to_owned() + " " + predicate + ";").as_str()
-                )?;
-                let mut out_vec = Vec::new();
-                let rows = stmt.query_map([], |row| {
-                    Ok(Self {
-                        #(#column_names: row.get((#column_nums))?,)*
-                    })
-                })?;
-                for r in rows {
-                    out_vec.push(r?)
-                }
-                Ok(out_vec)
-            }
-
             fn get_gpkg_table_name() -> &'static str {
                 std::stringify!(#table_name_final)
             }
