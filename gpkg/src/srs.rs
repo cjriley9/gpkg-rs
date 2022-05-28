@@ -1,3 +1,4 @@
+/// Represents a spatial reference system as it appears in the GeoPackage [specification](https://www.geopackage.org/spec130/#gpkg_spatial_ref_sys_cols)
 pub struct SpatialRefSys<'a> {
     pub name: &'a str,
     pub id: i64,

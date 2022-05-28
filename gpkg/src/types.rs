@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::result;
 use wkb::WKBReadError;
 
-/// A typedef of the result returned by many methods.
+/// The result returned by many methods within the crate
 pub type Result<T, E = Error> = result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]

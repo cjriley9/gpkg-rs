@@ -34,7 +34,7 @@ const GEO_TYPES: &'static [&'static str] = &[
     "GPKGMultiPointZM",
 ];
 
-/// A macro for deriving an implementation of GPKGModel for a struct. If no
+/// A macro for deriving an implementation of GPKGModel for a struct
 ///
 /// # Usage
 /// ```ignore
@@ -355,14 +355,6 @@ fn impl_model(
         .collect();
 
     let params = vec![quote!(?); column_names.len()];
-
-    let column_params: Vec<TokenStream> = field_infos
-        .iter()
-        .map(|i| {
-            let name_ident = Ident::new(i.name.as_str(), Span::call_site());
-            quote!(self.#name_ident)
-        })
-        .collect();
 
     let column_nums = (0..column_defs.len())
         .map(|i| LitInt::new(i.to_string().as_str(), Span::call_site()))

@@ -1,16 +1,21 @@
 #![allow(dead_code)]
-pub mod gpkg_wkb;
+mod gpkg_wkb;
 mod sql;
-pub mod srs;
+mod srs;
 pub mod types;
 use crate::sql::table_definitions::*;
-use crate::srs::{defaults::*, SpatialRefSys};
-use geo_types::Polygon;
+use crate::srs::defaults::*;
 #[doc(inline)]
 pub use gpkg_derive::GPKGModel;
+#[doc(inline)]
+pub use gpkg_wkb::GeoPackageWKB;
 use rusqlite::{params, Connection, DatabaseName, OpenFlags};
+#[doc(inline)]
+pub use srs::SpatialRefSys;
 use std::path::Path;
-use types::{Error, Result};
+use types::Error;
+#[doc(inline)]
+pub use types::Result;
 
 /// A GeoPackage, upon creation, the necessary tables for conformance to the specification are created,
 /// and validation is performed upon opening.
@@ -43,7 +48,7 @@ pub trait GPKGModel<'a>: Sized {
 }
 
 #[derive(Debug)]
-pub enum GPKGDataType {
+enum GPKGDataType {
     Features,
     Attributes,
 }
@@ -240,8 +245,7 @@ impl GeoPackage {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::Path;
-    use tempfile::{tempdir, TempDir};
+    use tempfile::tempdir;
 
     use crate::types::*;
 

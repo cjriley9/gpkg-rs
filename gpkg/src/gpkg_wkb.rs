@@ -5,10 +5,7 @@ use std::convert::Into;
 use std::io::Cursor;
 use wkb::WKBAbleExt;
 
-// pub struct GeoPackageGeom<T: GeoPackageWKB> {
-//     t: T,
-// }
-
+/// A trait containing method for encoding geometries according to the GeoPackage [specifcation](https://www.geopackage.org/spec130/#gpb_spec)
 pub trait GeoPackageWKB: Sized {
     fn to_wkb(&self) -> Result<Vec<u8>, wkb::WKBWriteError>;
     fn from_wkb(wkb: &mut [u8]) -> Result<Self, wkb::WKBReadError>;
