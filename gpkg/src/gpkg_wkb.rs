@@ -1,3 +1,4 @@
+use crate::result::{Error, Result};
 use crate::types::*;
 use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use rusqlite::ToSql;

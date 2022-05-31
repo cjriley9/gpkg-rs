@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 mod gpkg_wkb;
+mod result;
 mod sql;
 mod srs;
+/// A set of geometry types with the required implementations to be used for readung and writing to GeoPackages
 pub mod types;
 use crate::sql::table_definitions::*;
 use crate::srs::defaults::*;
@@ -9,13 +11,12 @@ use crate::srs::defaults::*;
 pub use gpkg_derive::GPKGModel;
 #[doc(inline)]
 pub use gpkg_wkb::GeoPackageWKB;
+#[doc(inline)]
+pub use result::{Error, Result};
 use rusqlite::{params, Connection, DatabaseName, OpenFlags};
 #[doc(inline)]
 pub use srs::SpatialRefSys;
 use std::path::Path;
-use types::Error;
-#[doc(inline)]
-pub use types::Result;
 
 /// A GeoPackage, upon creation, the necessary tables for conformance to the specification are created,
 /// and validation is performed upon opening.
@@ -44,7 +45,7 @@ pub trait GPKGModel<'a>: Sized {
 
     fn as_params(&self) -> Vec<&(dyn rusqlite::ToSql + '_)>;
 
-    fn get_gpkg_table_name() -> &'static str;
+    fn get_gpkg_layer_name() -> &'static str;
 }
 
 #[derive(Debug)]
@@ -181,15 +182,15 @@ impl GeoPackage {
         Ok(())
     }
 
-    fn update_layer_srs_id(&mut self, table_name: &str, srs_id: i64) -> Result<()> {
+    fn update_layer_srs_id(&mut self, layer_name: &str, srs_id: i64) -> Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute(
-            "UPDATE gpkg_contents SET srs_id = ?1 WHERE table_name = ?2",
-            params![srs_id, table_name],
+            "UPDATE gpkg_contents SET srs_id = ?1 WHERE layer_name = ?2",
+            params![srs_id, layer_name],
         )?;
         tx.execute(
-            "UPDATE gpkg_geometry_columns SET srs_id = ?1 WHERE table_name = ?2",
-            params![srs_id, table_name],
+            "UPDATE gpkg_geometry_columns SET srs_id = ?1 WHERE layer_name = ?2",
+            params![srs_id, layer_name],
         )?;
         tx.commit()?;
         Ok(())
@@ -259,7 +260,7 @@ mod tests {
     use super::*;
 
     #[derive(GPKGModel, Debug)]
-    #[table_name = "test"]
+    #[layer_name = "test"]
     struct TestTableGeom {
         start_node: Option<i64>,
         end_node: i64,
@@ -270,7 +271,7 @@ mod tests {
     }
 
     #[derive(GPKGModel, Debug, PartialEq, Eq)]
-    #[table_name = "test"]
+    #[layer_name = "test"]
     struct TestTableAttr {
         field1: Option<i64>,
         field2: i64,

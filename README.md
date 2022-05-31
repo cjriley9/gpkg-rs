@@ -10,11 +10,11 @@ The goal of the crate is to adhere to the Geopackage [specification](https://www
 - [X] Write 2D vector data
 - [ ] Read vector data with M and Z coordinates
 - [ ] Write vector data with M and Z coordinates
-- [ ] Support writing bounding boxes for geometries
 - [ ] Support for user specified SRS other than WGS84 
+- [ ] Support writing bounding boxes for geometries
+- [ ] Support for the [RTree Spatial Indexes](https://www.geopackage.org/spec130/#extension_rtree) extension
 - [ ] Read image tile data 
 - [ ] Write image tile data 
-- [ ] GeoPackage Extension support
 
 ## Notes:
 * Reading and writing 2D vector data currently only supports little endian WKB encoding due to a dependency on the [wkb](https://docs.rs/wkb/latest/wkb/) crate.

@@ -36,10 +36,24 @@ const GEO_TYPES: &'static [&'static str] = &[
 
 /// A macro for deriving an implementation of GPKGModel for a struct
 ///
+/// The layer_name attribute controls the name of the SQLite table that instances of this Struct will be read and written as
+///
+/// The geom_field attribute can only be used on one field, and the geometry type will be cast to uppercase
+/// the used as the geomtry type for the layer. If the letters Z and/or M are present in the geometry type,
+/// the corresponding flags will be set within the GeoPackage indicating that the geometry has M or Z values.
+///
+/// When this macro is used, an "object_id" primary key column will be created in order to comply with the specifcation,
+/// but will be transparent to you as a user of this crate
+///
+/// When using this macro for reading an existing GeoPackage layer, any unspecified columns will not be read.
 /// # Usage
 /// ```ignore
+/// # // would be great to get this test working, but I'm not sure how to do it without curculare dependency issues
+/// # use gpkg_derive::GPKGModel;
+/// # use gpkg::types::{GPKGPoint, GPKGPointZ};
+///
 /// #[derive(GPKGModel)]
-/// #[table_name = "test_table"]
+/// #[layer_name = "test_table"]
 /// struct TestTable {
 ///     field1: i64,
 ///     field2: i32,
@@ -47,8 +61,15 @@ const GEO_TYPES: &'static [&'static str] = &[
 ///     shape: GPKGPoint,
 /// }
 ///
-/// TestTable::create_table(&gp).unwrap();
-#[proc_macro_derive(GPKGModel, attributes(table_name, geom_field))]
+/// #[derive(GPKGModel)]
+/// #[layer_name = "test_tableZ"]
+/// struct TestTableZ {
+///     field1: i64,
+///     field2: i32,
+///     #[geom_field("PointZ")]
+///     shape: GPKGPointZ,
+/// }
+#[proc_macro_derive(GPKGModel, attributes(layer_name, geom_field))]
 pub fn derive_gpkg(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let inner_input = proc_macro2::TokenStream::from(input);
     proc_macro::TokenStream::from(derive_gpkg_inner(inner_input))
@@ -57,7 +78,7 @@ pub fn derive_gpkg(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 fn derive_gpkg_inner(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     let ast = parse2::<DeriveInput>(input).unwrap();
 
-    let tbl_name_meta = get_meta_attr(&ast.attrs, "table_name");
+    let tbl_name_meta = get_meta_attr(&ast.attrs, "layer_name");
     let tbl_name = tbl_name_meta.and_then(|meta| match meta {
         Meta::NameValue(MetaNameValue {
             lit: Lit::Str(ls), ..
@@ -197,7 +218,7 @@ fn impl_model(
 ) -> TokenStream {
     // overwrite the struct name with a provided table name if one is given
     // TODO: add some level of validation here based on sqlite's rules
-    let table_name_final = match tbl_name {
+    let layer_name_final = match tbl_name {
         Some(n) => Ident::new(&n, name.span()),
         None => name.to_owned(),
     };
@@ -266,8 +287,8 @@ fn impl_model(
     );
     let mut geom_column_sql: Option<String> = None;
     let mut contents_sql = format!(
-        r#"INSERT INTO gpkg_contents (table_name, data_type) VALUES ("{}", "{}");"#,
-        table_name_final, "attributes"
+        r#"INSERT INTO gpkg_contents (layer_name, data_type) VALUES ("{}", "{}");"#,
+        layer_name_final, "attributes"
     );
 
     if geom_fields.len() > 0 {
@@ -277,7 +298,7 @@ fn impl_model(
         geom_field_name = geom_field.name.clone();
         geom_column_sql = Some(format!(
             r#"INSERT INTO gpkg_geometry_columns VALUES("{}", "{}", "{}", {}, {}, {});"#,
-            table_name_final,
+            layer_name_final,
             geom_field_name,
             geom_type_sql.to_uppercase(),
             geom_info.srs_id,
@@ -285,8 +306,8 @@ fn impl_model(
             geom_info.z as i32
         ));
         contents_sql = format!(
-            r#"INSERT INTO gpkg_contents (table_name, data_type, srs_id) VALUES ("{}", "{}", {});"#,
-            table_name_final, "features", geom_info.srs_id
+            r#"INSERT INTO gpkg_contents (layer_name, data_type, srs_id) VALUES ("{}", "{}", {});"#,
+            layer_name_final, "features", geom_info.srs_id
         );
     };
     let contents_ts: TokenStream = contents_sql
@@ -324,14 +345,14 @@ fn impl_model(
     // this is so that lifetimes will work
     let new = quote!(
         impl GPKGModel <'_> for #name #final_generics {
-            fn get_gpkg_table_name() -> &'static str {
-                std::stringify!(#table_name_final)
+            fn get_gpkg_layer_name() -> &'static str {
+                std::stringify!(#layer_name_final)
             }
 
             fn get_create_sql() -> &'static str {
                 std::stringify!(
                     BEGIN;
-                    CREATE TABLE #table_name_final (
+                    CREATE TABLE #layer_name_final (
                         object_id INTEGER PRIMARY KEY,
                         #(#column_defs ),*
                     );
@@ -343,7 +364,7 @@ fn impl_model(
 
             fn get_insert_sql() -> &'static str {
                 std::stringify!(
-                    INSERT INTO #table_name_final (
+                    INSERT INTO #layer_name_final (
                         #(#column_names),*
                     ) VALUES (
                         #(#params),*
@@ -353,13 +374,13 @@ fn impl_model(
 
             fn get_select_sql() -> &'static str {
                 std::stringify!(
-                    SELECT #(#column_names),* FROM #table_name_final;
+                    SELECT #(#column_names),* FROM #layer_name_final;
                 )
             }
 
             fn get_select_where(predicate: &str) -> String {
                 (std::stringify!(
-                    SELECT #(#column_names),* FROM #table_name_final WHERE
+                    SELECT #(#column_names),* FROM #layer_name_final WHERE
                 ).to_owned() + " " + predicate + ";")
             }
 
@@ -427,7 +448,7 @@ mod test {
     #[test]
     fn basic_test() {
         let tstream = quote!(
-            #[table_name = "streetlights"]
+            #[layer_name = "streetlights"]
             // #[test_thing = "blah"]
             struct StreetLight {
                 id: i64,
