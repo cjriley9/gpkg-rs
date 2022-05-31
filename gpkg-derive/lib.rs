@@ -4,34 +4,34 @@ use quote::quote;
 use std::ops::Deref;
 use syn::{
     parse2, Attribute, DeriveInput, Field, GenericArgument, GenericParam, Generics, Ident, Lit,
-    LitInt, Meta, Type, TypePath, TypeReference,
+    LitInt, Meta, MetaNameValue, Type, TypePath, TypeReference,
 };
 
 const GEO_TYPES: &'static [&'static str] = &[
-    "GPKGPolygon",
-    "GPKGLineString",
-    "GPKGPoint",
-    "GPKGMultiPolygon",
-    "GPKGMultiLineString",
-    "GPKGMultiPoint",
-    "GPKGPolygonM",
-    "GPKGLineStringM",
-    "GPKGPointM",
-    "GPKGMultiPolygonM",
-    "GPKGMultiLineStringM",
-    "GPKGMultiPointM",
-    "GPKGPolygonZ",
-    "GPKGLineStringZ",
-    "GPKGPointZ",
-    "GPKGMultiPolygonZ",
-    "GPKGMultiLineStringZ",
-    "GPKGMultiPointZ",
-    "GPKGPolygonZM",
-    "GPKGLineStringZM",
-    "GPKGPointZM",
-    "GPKGMultiPolygonZM",
-    "GPKGMultiLineStringZM",
-    "GPKGMultiPointZM",
+    "POLYGON",
+    "LINESTRING",
+    "POINT",
+    "MULTIPOLYGON",
+    "MULTILINESTRING",
+    "MULTIPOINT",
+    "POLYGONM",
+    "LINESTRINGM",
+    "POINTM",
+    "MULTIPOLYGONM",
+    "MULTILINESTRINGM",
+    "MULTIPOINTM",
+    "POLYGONZ",
+    "LINESTRINGZ",
+    "POINTZ",
+    "MULTIPOLYGONZ",
+    "MULTILINESTRINGZ",
+    "MULTIPOINTZ",
+    "POLYGONZM",
+    "LINESTRINGZM",
+    "POINTZM",
+    "MULTIPOLYGONZM",
+    "MULTILINESTRINGZM",
+    "MULTIPOINTZM",
 ];
 
 /// A macro for deriving an implementation of GPKGModel for a struct
@@ -43,7 +43,7 @@ const GEO_TYPES: &'static [&'static str] = &[
 /// struct TestTable {
 ///     field1: i64,
 ///     field2: i32,
-///     #[geom_field]
+///     #[geom_field("Point")]
 ///     shape: GPKGPoint,
 /// }
 ///
@@ -58,16 +58,12 @@ fn derive_gpkg_inner(input: proc_macro2::TokenStream) -> proc_macro2::TokenStrea
     let ast = parse2::<DeriveInput>(input).unwrap();
 
     let tbl_name_meta = get_meta_attr(&ast.attrs, "table_name");
-    let tbl_name = match tbl_name_meta {
-        Some(meta) => match meta {
-            Meta::NameValue(nv) => match nv.lit {
-                Lit::Str(ls) => Some(ls.value()),
-                _ => None,
-            },
-            _ => None,
-        },
+    let tbl_name = tbl_name_meta.and_then(|meta| match meta {
+        Meta::NameValue(MetaNameValue {
+            lit: Lit::Str(ls), ..
+        }) => Some(ls.value()),
         _ => None,
-    };
+    });
 
     // ge the name for our table name
     let name = &ast.ident;
@@ -187,31 +183,6 @@ fn get_path_type_name(p: &TypePath) -> (String, bool) {
                 panic!("Vec<u8> is the only allowed use of the Vec type");
             }
         }
-        // _ if GEO_TYPES.contains(&id_string.as_str()) => {
-        //     if let syn::PathArguments::AngleBracketed(a) = &final_segment.arguments {
-        //         assert!(
-        //             a.args.len() == 1,
-        //             "Only one argument allowed in a Geometry type"
-        //         );
-        //         if let GenericArgument::Type(t) = &a.args[0] {
-        //             match t {
-        //                 Type::Path(p) => {
-        //                     let type_return = get_path_type_name(p).0;
-        //                     match type_return.as_str() {
-        //                     "f64" => return (id_string, optional),
-        //                     _ => panic!("Geo types must use f64 coordinates for geopackage compatibility"),
-        //                 };
-        //                 }
-        //                 _ => panic!(
-        //                     "Geo types must use f64 coordinates for geopackage compatibility"
-        //                 ),
-        //             }
-        //         }
-        //     } else {
-        //         panic!("Geo types must use f64 coordinates for geopackage compatibility");
-        //     }
-        // }
-        // fall through and use the basic type we got at the beginning
         _ => {}
     }
 
@@ -233,8 +204,8 @@ fn impl_model(
 
     let geom_field_name: String;
 
+    // need to get this in order to make liftimes on the Impl work correctly
     let mut final_generics = generics.clone();
-
     if let Some(g) = final_generics.params.first_mut() {
         match g {
             GenericParam::Lifetime(l) => match l.lifetime.ident.to_string().as_str() {
@@ -253,7 +224,7 @@ fn impl_model(
             let mut optional = false;
             let field_name = f.ident.as_ref().expect("Expected named field").to_string();
             let type_name: String;
-            let is_geom_field = is_geom_field(&f);
+            let geom_info = get_geom_field_info(&f);
             match &f.ty {
                 syn::Type::Reference(r) => {
                     type_name = get_reference_type_name(r);
@@ -272,18 +243,9 @@ fn impl_model(
                 "u128" | "u64" | "u32" | "u16" | "u8" => {
                     panic!("SQLite doesn't support unsigned integers, use a signed integer value")
                 }
-                _ if GEO_TYPES.contains(&type_name.as_str()) => quote!(BLOB),
+                // all geometry types are a blob inside sqlite
+                _ if geom_info.is_some() => quote!(BLOB),
                 _ => panic!("Don't know how to map to SQL type {}", type_name),
-            };
-            let geom_info = match is_geom_field {
-                true => Some(GeomInfo {
-                    geom_type: type_name.clone(),
-                    // default wgs84
-                    srs_id: 4326,
-                    m: MZOptions::Prohibited,
-                    z: MZOptions::Prohibited,
-                }),
-                false => None,
             };
             FieldInfo {
                 name: field_name,
@@ -311,8 +273,7 @@ fn impl_model(
     if geom_fields.len() > 0 {
         let geom_field = geom_fields[0];
         let geom_info = geom_field.geom_info.clone().unwrap();
-        let mut geom_type_sql = geom_info.geom_type.clone();
-        geom_type_sql.replace_range(0..4, "");
+        let geom_type_sql = geom_info.geom_type.clone();
         geom_field_name = geom_field.name.clone();
         geom_column_sql = Some(format!(
             r#"INSERT INTO gpkg_geometry_columns VALUES("{}", "{}", "{}", {}, {}, {});"#,
@@ -327,7 +288,6 @@ fn impl_model(
             r#"INSERT INTO gpkg_contents (table_name, data_type, srs_id) VALUES ("{}", "{}", {});"#,
             table_name_final, "features", geom_info.srs_id
         );
-        // println!("{}", &(geom_column_sql).unwrap());
     };
     let contents_ts: TokenStream = contents_sql
         .parse()
@@ -419,15 +379,45 @@ fn impl_model(
     new
 }
 
-fn is_geom_field(field: &Field) -> bool {
+fn get_geom_field_info(field: &Field) -> Option<GeomInfo> {
     for attr in &field.attrs {
         if let Some(ident) = attr.path.get_ident() {
             if ident.to_string() == "geom_field" {
-                return true;
+                let geom_type_name =
+                    get_meta_attr(&field.attrs, "geom_field").and_then(|meta| match meta {
+                        Meta::List(l) => l.nested.first().and_then(|n| match n {
+                            syn::NestedMeta::Lit(Lit::Str(ls)) => Some(ls.value()),
+                            _ => panic!("You must specify a geometry type when using the geom_field attribute"),
+                        }),
+                        _ => panic!("You must specify a geometry type when using the geom_field attribute"),
+                    });
+                if let Some(name) = geom_type_name {
+                    let upper_name = name.to_uppercase();
+                    if GEO_TYPES.contains(&upper_name.as_str()) {
+                        let m = if upper_name.contains("M") {
+                            MZOptions::Optional
+                        } else {
+                            MZOptions::Prohibited
+                        };
+                        let z = if upper_name.contains("Z") {
+                            MZOptions::Optional
+                        } else {
+                            MZOptions::Prohibited
+                        };
+                        return Some(GeomInfo {
+                            geom_type: upper_name,
+                            srs_id: 4326,
+                            m,
+                            z,
+                        });
+                    } else {
+                        panic!("{} is not a supported geometry type", name);
+                    }
+                }
             }
         }
     }
-    false
+    None
 }
 
 #[cfg(test)]
@@ -444,7 +434,7 @@ mod test {
                 height: f64,
                 string_ref: Option<String>,
                 buf_ref: &'a [u8],
-                #[geom_field]
+                #[geom_field("LineStringZ")]
                 geom: GPKGLineStringZ,
             }
         );

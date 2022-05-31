@@ -18,6 +18,8 @@ pub enum Error {
     SQLiteError(#[from] rusqlite::Error),
     #[error("Tried to create a geopackage that already exists")]
     CreateExistingError,
+    #[error("GeoPackage failed validation check when opening")]
+    ValidationError,
 }
 
 #[derive(Debug)]

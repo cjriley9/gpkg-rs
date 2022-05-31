@@ -216,24 +216,31 @@ impl GeoPackage {
             conn.query_row("SELECT * FROM pragma_application_id()", [], |row| {
                 row.get(0)
             })?;
-        assert_eq!(application_id, 0x47504B47);
-        let user_version: u32 =
-            conn.query_row("SELECT * FROM pragma_user_version()", [], |row| row.get(0))?;
+        if application_id != 0x47504B47 {
+            return Err(Error::ValidationError);
+        }
         // what do we do with the user version?
-        dbg!(user_version);
+        // it doesn't seem safe to just fail if this doesn't match something
+        // maybe this should just have an acceptable range?
+        let _user_version: u32 =
+            conn.query_row("SELECT * FROM pragma_user_version()", [], |row| row.get(0))?;
         // integrity check from requirement 6
         let integrity_check: String =
             conn.query_row("SELECT * FROM pragma_integrity_check()", [], |row| {
                 row.get(0)
             })?;
-        assert_eq!(integrity_check, "ok".to_owned());
+        if integrity_check.as_str() != "ok" {
+            return Err(Error::ValidationError);
+        }
         // check that there are no foreign keys as per spec requirement 7
         // use a block to force a drop of stmt and release the borrow
         // so that we can move conn
         {
             let mut stmt = conn.prepare("SELECT * FROM pragma_foreign_key_check()")?;
             let mut rows = stmt.query([])?;
-            assert!(rows.next()?.is_none());
+            if !(rows.next()?.is_none()) {
+                return Err(Error::ValidationError);
+            }
         }
         // get the tables
         let tables = Vec::new();
@@ -257,7 +264,8 @@ mod tests {
         start_node: Option<i64>,
         end_node: i64,
         rev_cost: String,
-        #[geom_field]
+        // #[geom_field("LineStringZ")]
+        #[geom_field("LineStringZ")]
         geom: types::GPKGLineStringZ,
     }
 
