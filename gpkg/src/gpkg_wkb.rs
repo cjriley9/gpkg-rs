@@ -526,7 +526,9 @@ mod tests {
 
     use super::*;
     use byteorder::{BigEndian, LittleEndian};
-    use geo_types::{coord, Coordinate, LineString, MultiPoint, Point, Polygon};
+    use geo_types::{
+        coord, Coordinate, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon,
+    };
 
     fn points_equal(p1: &Point<f64>, p2: &Point<f64>) -> bool {
         return (p1.x().to_ne_bytes() == p2.x().to_ne_bytes())
@@ -559,179 +561,82 @@ mod tests {
         true
     }
 
-    #[test]
-    fn write_point() {
+    fn write_test_point_buf<T: ByteOrder>(endian_byte: u8) -> Vec<u8> {
         let mut manual_buf = Vec::new();
-        // little endian
-        manual_buf.write_u8(1).unwrap();
+        manual_buf.write_u8(endian_byte).unwrap();
         // geom type flag
-        manual_buf.write_u32::<LittleEndian>(1).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-105.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(40.0).unwrap();
+        manual_buf.write_u32::<T>(1).unwrap();
+        manual_buf.write_f64::<T>(-105.0).unwrap();
+        manual_buf.write_f64::<T>(40.0).unwrap();
 
-        let point: Point<f64> = (coord! {x: -105.0, y: 40.0}).into();
-        let mut auto_buf = Vec::new();
-        point.write_as_wkb(&mut auto_buf).unwrap();
-
-        assert_eq!(manual_buf, auto_buf);
-
-        // lets also make sure we can read in our own output
-        let mut rdr = Cursor::new(auto_buf);
-        let written_point = Point::read_from_wkb(&mut rdr).unwrap();
-
-        assert!(points_equal(&point, &written_point));
+        manual_buf
     }
 
-    #[test]
-    fn read_point() {
-        let mut le_buf = Vec::new();
-        le_buf.write_u8(1).unwrap();
-        le_buf.write_u32::<LittleEndian>(1).unwrap();
-        le_buf.write_f64::<LittleEndian>(-105.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(40.0).unwrap();
-
-        let pt: Point<f64> = (coord! {x: -105.0, y: 40.0}).into();
-
-        let mut le_rdr = Cursor::new(le_buf);
-        let le_cmp_pt = Point::<f64>::read_from_wkb(&mut le_rdr).unwrap();
-
-        assert!(points_equal(&pt, &le_cmp_pt));
-
-        let mut be_buf = Vec::new();
-        be_buf.write_u8(0).unwrap();
-        be_buf.write_u32::<BigEndian>(1).unwrap();
-        be_buf.write_f64::<BigEndian>(-105.0).unwrap();
-        be_buf.write_f64::<BigEndian>(40.0).unwrap();
-
-        let pt: Point<f64> = (coord! {x: -105.0, y: 40.0}).into();
-
-        let mut be_rdr = Cursor::new(be_buf);
-        let be_cmp_pt = Point::<f64>::read_from_wkb(&mut be_rdr).unwrap();
-
-        assert!(points_equal(&pt, &be_cmp_pt))
+    fn get_test_point() -> Point<f64> {
+        (coord! {x: -105.0, y: 40.0}).into()
     }
 
-    #[test]
-    fn write_linestring() {
+    fn write_test_linestring_buf<T: ByteOrder>(endian_byte: u8) -> Vec<u8> {
         let mut manual_buf = Vec::new();
         // little endian
-        manual_buf.write_u8(1).unwrap();
+        manual_buf.write_u8(endian_byte).unwrap();
         // geom type flag
-        manual_buf.write_u32::<LittleEndian>(2).unwrap();
+        manual_buf.write_u32::<T>(2).unwrap();
         // number of points
-        manual_buf.write_u32::<LittleEndian>(3).unwrap();
+        manual_buf.write_u32::<T>(3).unwrap();
         // points
-        manual_buf.write_f64::<LittleEndian>(-105.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(40.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-106.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(41.5).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-107.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(43.0).unwrap();
+        manual_buf.write_f64::<T>(-105.0).unwrap();
+        manual_buf.write_f64::<T>(40.0).unwrap();
+        manual_buf.write_f64::<T>(-106.0).unwrap();
+        manual_buf.write_f64::<T>(41.5).unwrap();
+        manual_buf.write_f64::<T>(-107.0).unwrap();
+        manual_buf.write_f64::<T>(43.0).unwrap();
 
-        let ls: LineString<f64> = LineString::new(vec![
+        manual_buf
+    }
+
+    fn get_test_linestring() -> LineString<f64> {
+        LineString::new(vec![
             coord! {x: -105.0, y: 40.0},
             coord! {x: -106.0, y: 41.5},
             coord! {x: -107.0, y: 43.0},
-        ]);
-        let mut auto_buf = Vec::new();
-        ls.write_as_wkb(&mut auto_buf).unwrap();
-
-        assert_eq!(manual_buf, auto_buf);
-
-        // lets also make sure we can read in our own output
-        let mut rdr = Cursor::new(auto_buf);
-        let written_ls = LineString::read_from_wkb(&mut rdr).unwrap();
-
-        assert!(linestrings_equal(&ls, &written_ls));
+        ])
     }
 
-    #[test]
-    fn read_linestring() {
-        let mut le_buf = Vec::new();
-        // little endian
-        le_buf.write_u8(1).unwrap();
-        // geom type flag
-        le_buf.write_u32::<LittleEndian>(2).unwrap();
-        // number of points
-        le_buf.write_u32::<LittleEndian>(3).unwrap();
-        // points
-        le_buf.write_f64::<LittleEndian>(-105.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(40.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(-106.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(41.5).unwrap();
-        le_buf.write_f64::<LittleEndian>(-107.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(43.0).unwrap();
-
-        let ls: LineString<f64> = LineString::new(vec![
-            coord! {x: -105.0, y: 40.0},
-            coord! {x: -106.0, y: 41.5},
-            coord! {x: -107.0, y: 43.0},
-        ]);
-
-        let mut le_rdr = Cursor::new(le_buf);
-        let le_cmp_ls = LineString::read_from_wkb(&mut le_rdr).unwrap();
-
-        assert_eq!(&ls, &le_cmp_ls);
-
-        let mut be_buf = Vec::new();
-        // big endian
-        be_buf.write_u8(0).unwrap();
-        // geom type flag
-        be_buf.write_u32::<BigEndian>(2).unwrap();
-        // number of points
-        be_buf.write_u32::<BigEndian>(3).unwrap();
-        // points
-        be_buf.write_f64::<BigEndian>(-105.0).unwrap();
-        be_buf.write_f64::<BigEndian>(40.0).unwrap();
-        be_buf.write_f64::<BigEndian>(-106.0).unwrap();
-        be_buf.write_f64::<BigEndian>(41.5).unwrap();
-        be_buf.write_f64::<BigEndian>(-107.0).unwrap();
-        be_buf.write_f64::<BigEndian>(43.0).unwrap();
-
-        let ls: LineString<f64> = LineString::new(vec![
-            coord! {x: -105.0, y: 40.0},
-            coord! {x: -106.0, y: 41.5},
-            coord! {x: -107.0, y: 43.0},
-        ]);
-
-        let mut be_rdr = Cursor::new(be_buf);
-        let be_cmp_ls = LineString::read_from_wkb(&mut be_rdr).unwrap();
-
-        assert_eq!(&ls, &be_cmp_ls);
-    }
-
-    #[test]
-    fn write_polygon() {
+    fn write_test_polygon_buf<T: ByteOrder>(endian_byte: u8) -> Vec<u8> {
         let mut manual_buf = Vec::new();
         // little endian
-        manual_buf.write_u8(1).unwrap();
+        manual_buf.write_u8(endian_byte).unwrap();
         // geom type flag
-        manual_buf.write_u32::<LittleEndian>(3).unwrap();
+        manual_buf.write_u32::<T>(3).unwrap();
         // number of points
-        manual_buf.write_u32::<LittleEndian>(2).unwrap();
+        manual_buf.write_u32::<T>(2).unwrap();
         // exterior ring
-        manual_buf.write_u32::<LittleEndian>(5).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-105.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(40.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-106.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(41.5).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-107.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(43.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-107.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(40.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-105.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(40.0).unwrap();
+        manual_buf.write_u32::<T>(5).unwrap();
+        manual_buf.write_f64::<T>(-105.0).unwrap();
+        manual_buf.write_f64::<T>(40.0).unwrap();
+        manual_buf.write_f64::<T>(-106.0).unwrap();
+        manual_buf.write_f64::<T>(41.5).unwrap();
+        manual_buf.write_f64::<T>(-107.0).unwrap();
+        manual_buf.write_f64::<T>(43.0).unwrap();
+        manual_buf.write_f64::<T>(-107.0).unwrap();
+        manual_buf.write_f64::<T>(40.0).unwrap();
+        manual_buf.write_f64::<T>(-105.0).unwrap();
+        manual_buf.write_f64::<T>(40.0).unwrap();
         // interior_ring
-        manual_buf.write_u32::<LittleEndian>(4).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-105.5).unwrap();
-        manual_buf.write_f64::<LittleEndian>(40.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-106.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(41.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-107.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(42.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-105.5).unwrap();
-        manual_buf.write_f64::<LittleEndian>(40.0).unwrap();
+        manual_buf.write_u32::<T>(4).unwrap();
+        manual_buf.write_f64::<T>(-105.5).unwrap();
+        manual_buf.write_f64::<T>(40.0).unwrap();
+        manual_buf.write_f64::<T>(-106.0).unwrap();
+        manual_buf.write_f64::<T>(41.0).unwrap();
+        manual_buf.write_f64::<T>(-107.0).unwrap();
+        manual_buf.write_f64::<T>(42.0).unwrap();
+        manual_buf.write_f64::<T>(-105.5).unwrap();
+        manual_buf.write_f64::<T>(40.0).unwrap();
 
+        manual_buf
+    }
+    fn get_test_polygon() -> Polygon<f64> {
         let exterior_ring: LineString<f64> = LineString::new(vec![
             coord! {x: -105.0, y: 40.0},
             coord! {x: -106.0, y: 41.5},
@@ -746,7 +651,251 @@ mod tests {
             coord! {x: -107.0, y: 42.0},
             coord! {x: -105.5, y: 40.0},
         ]);
-        let poly = Polygon::new(exterior_ring, vec![interior_ring]);
+        Polygon::new(exterior_ring, vec![interior_ring])
+    }
+
+    fn write_test_multipoint_buf<T: ByteOrder>(endian_byte: u8) -> Vec<u8> {
+        let mut manual_buf = Vec::new();
+        manual_buf.write_u8(endian_byte).unwrap();
+        // geom type flag
+        manual_buf.write_u32::<T>(4).unwrap();
+        // number of points
+        manual_buf.write_u32::<T>(4).unwrap();
+        manual_buf.write_f64::<T>(-105.0).unwrap();
+        manual_buf.write_f64::<T>(40.0).unwrap();
+        manual_buf.write_f64::<T>(-95.0).unwrap();
+        manual_buf.write_f64::<T>(15.0).unwrap();
+        manual_buf.write_f64::<T>(105.0).unwrap();
+        manual_buf.write_f64::<T>(-40.0).unwrap();
+        manual_buf.write_f64::<T>(-135.0).unwrap();
+        manual_buf.write_f64::<T>(-20.0).unwrap();
+
+        manual_buf
+    }
+
+    fn get_test_multipoint() -> MultiPoint<f64> {
+        MultiPoint::new(vec![
+            (coord! {x: -105.0, y: 40.0}).into(),
+            (coord! {x: -95.0, y: 15.0}).into(),
+            (coord! {x: 105.0, y: -40.0}).into(),
+            (coord! {x: -135.0, y: -20.0}).into(),
+        ])
+    }
+
+    fn write_test_multilinestring_buf<T: ByteOrder>(endian_byte: u8) -> Vec<u8> {
+        let mut manual_buf = Vec::new();
+        manual_buf.write_u8(endian_byte).unwrap();
+        // geom type flag
+        manual_buf.write_u32::<T>(5).unwrap();
+        // number of linestring
+        manual_buf.write_u32::<T>(2).unwrap();
+        // number of points for linestring 1
+        manual_buf.write_u32::<T>(3).unwrap();
+        // points
+        manual_buf.write_f64::<T>(-105.0).unwrap();
+        manual_buf.write_f64::<T>(40.0).unwrap();
+        manual_buf.write_f64::<T>(-106.0).unwrap();
+        manual_buf.write_f64::<T>(41.5).unwrap();
+        manual_buf.write_f64::<T>(-107.0).unwrap();
+        manual_buf.write_f64::<T>(43.0).unwrap();
+
+        // number of points for linestring 2
+        manual_buf.write_u32::<T>(3).unwrap();
+        // points
+        manual_buf.write_f64::<T>(-15.0).unwrap();
+        manual_buf.write_f64::<T>(4.0).unwrap();
+        manual_buf.write_f64::<T>(-16.0).unwrap();
+        manual_buf.write_f64::<T>(4.5).unwrap();
+        manual_buf.write_f64::<T>(-17.0).unwrap();
+        manual_buf.write_f64::<T>(4.0).unwrap();
+
+        manual_buf
+    }
+    fn get_test_multilinestring() -> MultiLineString<f64> {
+        let ls1: LineString<f64> = LineString::new(vec![
+            coord! {x: -105.0, y: 40.0},
+            coord! {x: -106.0, y: 41.5},
+            coord! {x: -107.0, y: 43.0},
+        ]);
+
+        let ls2: LineString<f64> = LineString::new(vec![
+            coord! {x: -15.0, y: 4.0},
+            coord! {x: -16.0, y: 4.5},
+            coord! {x: -17.0, y: 4.0},
+        ]);
+        MultiLineString::new(vec![ls1, ls2])
+    }
+
+    fn write_test_multipolygon_buf<T: ByteOrder>(endian_byte: u8) -> Vec<u8> {
+        let mut manual_buf = Vec::new();
+        manual_buf.write_u8(endian_byte).unwrap();
+        // geom type flag
+        manual_buf.write_u32::<T>(6).unwrap();
+        // number of polygons
+        manual_buf.write_u32::<T>(2).unwrap();
+        // number of rings in polygon 1
+        manual_buf.write_u32::<T>(1).unwrap();
+        // number of points for exterior
+        manual_buf.write_u32::<T>(4).unwrap();
+        // points
+        manual_buf.write_f64::<T>(-105.0).unwrap();
+        manual_buf.write_f64::<T>(40.0).unwrap();
+        manual_buf.write_f64::<T>(-106.0).unwrap();
+        manual_buf.write_f64::<T>(43.5).unwrap();
+        manual_buf.write_f64::<T>(-107.0).unwrap();
+        manual_buf.write_f64::<T>(41.0).unwrap();
+        manual_buf.write_f64::<T>(-105.0).unwrap();
+        manual_buf.write_f64::<T>(40.0).unwrap();
+
+        // number of rings in polygon 2
+        manual_buf.write_u32::<T>(2).unwrap();
+        // number of points for exterior
+        manual_buf.write_u32::<T>(5).unwrap();
+        // points
+        manual_buf.write_f64::<T>(-15.0).unwrap();
+        manual_buf.write_f64::<T>(4.0).unwrap();
+        manual_buf.write_f64::<T>(16.0).unwrap();
+        manual_buf.write_f64::<T>(4.5).unwrap();
+        manual_buf.write_f64::<T>(-1.0).unwrap();
+        manual_buf.write_f64::<T>(10.0).unwrap();
+        manual_buf.write_f64::<T>(-10.0).unwrap();
+        manual_buf.write_f64::<T>(10.0).unwrap();
+        manual_buf.write_f64::<T>(-15.0).unwrap();
+        manual_buf.write_f64::<T>(4.0).unwrap();
+        // number of points for interior ring 1
+        manual_buf.write_u32::<T>(4).unwrap();
+        manual_buf.write_f64::<T>(-1.53).unwrap();
+        manual_buf.write_f64::<T>(4.999).unwrap();
+        manual_buf.write_f64::<T>(1.609).unwrap();
+        manual_buf.write_f64::<T>(5.67).unwrap();
+        manual_buf.write_f64::<T>(-2.345).unwrap();
+        manual_buf.write_f64::<T>(6.2).unwrap();
+        manual_buf.write_f64::<T>(-1.53).unwrap();
+        manual_buf.write_f64::<T>(4.999).unwrap();
+
+        manual_buf
+    }
+    fn get_test_multipolygon() -> MultiPolygon<f64> {
+        let poly1_exterior: LineString<f64> = LineString::new(vec![
+            coord! {x: -105.0, y: 40.0},
+            coord! {x: -106.0, y: 43.5},
+            coord! {x: -107.0, y: 41.0},
+            coord! {x: -105.0, y: 40.0},
+        ]);
+        let poly1 = Polygon::new(poly1_exterior, vec![]);
+
+        let poly2_exterior: LineString<f64> = LineString::new(vec![
+            coord! {x: -15.0, y: 4.0},
+            coord! {x: 16.0, y: 4.5},
+            coord! {x: -1.0, y: 10.0},
+            coord! {x: -10.0, y: 10.0},
+            coord! {x: -15.0, y: 4.0},
+        ]);
+
+        let poly2_interior: LineString<f64> = LineString::new(vec![
+            coord! {x: -1.53, y: 4.999},
+            coord! {x: 1.609, y: 5.67},
+            coord! {x: -2.345, y: 6.2},
+            coord! {x: -1.53, y: 4.999},
+        ]);
+        let poly2 = Polygon::new(poly2_exterior, vec![poly2_interior]);
+
+        MultiPolygon::new(vec![poly1, poly2])
+    }
+
+    macro_rules! make_write_test {
+        ($t:ty as $name:ident, $buf:ident, $item:ident, ) => {
+            #[test]
+            fn $name() {
+                let manual_buf = $buf::<LittleEndian>(1);
+                let point = $item();
+                let mut auto_buf = Vec::new();
+                point.write_as_wkb(&mut auto_buf).unwrap();
+                assert_eq!(manual_buf, auto_buf);
+
+                // lets also make sure we can read in our own output
+                let mut rdr = Cursor::new(auto_buf);
+                let written_point = <$t>::read_from_wkb(&mut rdr).unwrap();
+                assert!(points_equal(&point, &written_point));
+            }
+        };
+    }
+
+    // make_write_test!(Point<f64> as write_point, write_test_point_buf, get_test_point);
+    // make_write_test!(LineString<f64> as write_linestring, write_test_linestring_buf, get_test_linestring);
+    // make_write_test!(Polygon<f64> as write_polygon, write_test_polygon_buf, get_test_polygon);
+    // make_write_test!(MultiPoint<f64> as write_multipoint, write_test_multipoint_buf, get_test_multipoint);
+    // make_write_test!(MultiLineString<f64> as write_multilinestring, write_test_multilinestring_buf, get_test_multilinestring);
+    // make_write_test!(MultiPolygon<f64> as write_multipolygon, write_test_multipolygon_buf, get_test_multipolygon);
+    #[test]
+    fn write_point() {
+        let manual_buf = write_test_point_buf::<LittleEndian>(1);
+        let point = get_test_point();
+        let mut auto_buf = Vec::new();
+        point.write_as_wkb(&mut auto_buf).unwrap();
+        assert_eq!(manual_buf, auto_buf);
+
+        // lets also make sure we can read in our own output
+        let mut rdr = Cursor::new(auto_buf);
+        let written_point = Point::read_from_wkb(&mut rdr).unwrap();
+        assert!(points_equal(&point, &written_point));
+    }
+
+    #[test]
+    fn read_point() {
+        let pt: Point<f64> = get_test_point();
+
+        let le_buf = write_test_point_buf::<LittleEndian>(1);
+        let mut le_rdr = Cursor::new(le_buf);
+        let le_cmp_pt = Point::<f64>::read_from_wkb(&mut le_rdr).unwrap();
+
+        assert!(points_equal(&pt, &le_cmp_pt));
+
+        let be_buf = write_test_point_buf::<BigEndian>(0);
+        let mut be_rdr = Cursor::new(be_buf);
+        let be_cmp_pt = Point::<f64>::read_from_wkb(&mut be_rdr).unwrap();
+
+        assert!(points_equal(&pt, &be_cmp_pt))
+    }
+
+    #[test]
+    fn write_linestring() {
+        let manual_buf = write_test_linestring_buf::<LittleEndian>(1);
+        let ls = get_test_linestring();
+
+        let mut auto_buf = Vec::new();
+        ls.write_as_wkb(&mut auto_buf).unwrap();
+
+        assert_eq!(manual_buf, auto_buf);
+
+        // lets also make sure we can read in our own output
+        let mut rdr = Cursor::new(auto_buf);
+        let written_ls = LineString::read_from_wkb(&mut rdr).unwrap();
+
+        assert!(linestrings_equal(&ls, &written_ls));
+    }
+
+    #[test]
+    fn read_linestring() {
+        let ls = get_test_linestring();
+
+        let le_buf = write_test_linestring_buf::<LittleEndian>(1);
+        let mut le_rdr = Cursor::new(le_buf);
+        let le_cmp_ls = LineString::read_from_wkb(&mut le_rdr).unwrap();
+
+        assert_eq!(&ls, &le_cmp_ls);
+
+        let be_buf = write_test_linestring_buf::<BigEndian>(0);
+        let mut be_rdr = Cursor::new(be_buf);
+        let be_cmp_ls = LineString::read_from_wkb(&mut be_rdr).unwrap();
+
+        assert_eq!(&ls, &be_cmp_ls);
+    }
+
+    #[test]
+    fn write_polygon() {
+        let manual_buf = write_test_polygon_buf::<LittleEndian>(1);
+        let poly = get_test_polygon();
 
         let mut auto_buf = Vec::new();
         poly.write_as_wkb(&mut auto_buf).unwrap();
@@ -762,103 +911,15 @@ mod tests {
 
     #[test]
     fn read_polygon() {
-        let mut le_buf = Vec::new();
-        // little endian
-        le_buf.write_u8(1).unwrap();
-        // geom type flag
-        le_buf.write_u32::<LittleEndian>(3).unwrap();
-        // number of points
-        le_buf.write_u32::<LittleEndian>(2).unwrap();
-        // exterior ring
-        le_buf.write_u32::<LittleEndian>(5).unwrap();
-        le_buf.write_f64::<LittleEndian>(-105.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(40.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(-106.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(41.5).unwrap();
-        le_buf.write_f64::<LittleEndian>(-107.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(43.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(-107.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(40.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(-105.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(40.0).unwrap();
-        // interior_ring
-        le_buf.write_u32::<LittleEndian>(4).unwrap();
-        le_buf.write_f64::<LittleEndian>(-105.5).unwrap();
-        le_buf.write_f64::<LittleEndian>(40.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(-106.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(41.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(-107.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(42.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(-105.5).unwrap();
-        le_buf.write_f64::<LittleEndian>(40.0).unwrap();
+        let poly = get_test_polygon();
 
-        let exterior_ring: LineString<f64> = LineString::new(vec![
-            coord! {x: -105.0, y: 40.0},
-            coord! {x: -106.0, y: 41.5},
-            coord! {x: -107.0, y: 43.0},
-            coord! {x: -107.0, y: 40.0},
-            coord! {x: -105.0, y: 40.0},
-        ]);
-
-        let interior_ring: LineString<f64> = LineString::new(vec![
-            coord! {x: -105.5, y: 40.0},
-            coord! {x: -106.0, y: 41.0},
-            coord! {x: -107.0, y: 42.0},
-            coord! {x: -105.5, y: 40.0},
-        ]);
-        let poly = Polygon::new(exterior_ring, vec![interior_ring]);
-
+        let le_buf = write_test_polygon_buf::<LittleEndian>(1);
         let mut le_rdr = Cursor::new(le_buf);
         let le_cmp_poly = Polygon::read_from_wkb(&mut le_rdr).unwrap();
 
         assert!(polygons_equal(&poly, &le_cmp_poly));
 
-        let mut be_buf = Vec::new();
-        // little endian
-        be_buf.write_u8(0).unwrap();
-        // geom type flag
-        be_buf.write_u32::<BigEndian>(3).unwrap();
-        // number of points
-        be_buf.write_u32::<BigEndian>(2).unwrap();
-        // exterior ring
-        be_buf.write_u32::<BigEndian>(5).unwrap();
-        be_buf.write_f64::<BigEndian>(-105.0).unwrap();
-        be_buf.write_f64::<BigEndian>(40.0).unwrap();
-        be_buf.write_f64::<BigEndian>(-106.0).unwrap();
-        be_buf.write_f64::<BigEndian>(41.5).unwrap();
-        be_buf.write_f64::<BigEndian>(-107.0).unwrap();
-        be_buf.write_f64::<BigEndian>(43.0).unwrap();
-        be_buf.write_f64::<BigEndian>(-107.0).unwrap();
-        be_buf.write_f64::<BigEndian>(40.0).unwrap();
-        be_buf.write_f64::<BigEndian>(-105.0).unwrap();
-        be_buf.write_f64::<BigEndian>(40.0).unwrap();
-        // interior_ring
-        be_buf.write_u32::<BigEndian>(4).unwrap();
-        be_buf.write_f64::<BigEndian>(-105.5).unwrap();
-        be_buf.write_f64::<BigEndian>(40.0).unwrap();
-        be_buf.write_f64::<BigEndian>(-106.0).unwrap();
-        be_buf.write_f64::<BigEndian>(41.0).unwrap();
-        be_buf.write_f64::<BigEndian>(-107.0).unwrap();
-        be_buf.write_f64::<BigEndian>(42.0).unwrap();
-        be_buf.write_f64::<BigEndian>(-105.5).unwrap();
-        be_buf.write_f64::<BigEndian>(40.0).unwrap();
-
-        let exterior_ring: LineString<f64> = LineString::new(vec![
-            coord! {x: -105.0, y: 40.0},
-            coord! {x: -106.0, y: 41.5},
-            coord! {x: -107.0, y: 43.0},
-            coord! {x: -107.0, y: 40.0},
-            coord! {x: -105.0, y: 40.0},
-        ]);
-
-        let interior_ring: LineString<f64> = LineString::new(vec![
-            coord! {x: -105.5, y: 40.0},
-            coord! {x: -106.0, y: 41.0},
-            coord! {x: -107.0, y: 42.0},
-            coord! {x: -105.5, y: 40.0},
-        ]);
-        let poly = Polygon::new(exterior_ring, vec![interior_ring]);
-
+        let be_buf = write_test_polygon_buf::<LittleEndian>(1);
         let mut be_rdr = Cursor::new(be_buf);
         let be_cmp_poly = Polygon::read_from_wkb(&mut be_rdr).unwrap();
 
@@ -867,28 +928,10 @@ mod tests {
 
     #[test]
     fn write_multipoint() {
-        let mut manual_buf = Vec::new();
-        // little endian
-        manual_buf.write_u8(1).unwrap();
-        // geom type flag
-        manual_buf.write_u32::<LittleEndian>(4).unwrap();
-        manual_buf.write_u32::<LittleEndian>(4).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-105.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(40.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-95.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(15.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(105.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-40.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-135.0).unwrap();
-        manual_buf.write_f64::<LittleEndian>(-20.0).unwrap();
-
-        let mp: MultiPoint<f64> = MultiPoint::new(vec![
-            (coord! {x: -105.0, y: 40.0}).into(),
-            (coord! {x: -95.0, y: 15.0}).into(),
-            (coord! {x: 105.0, y: -40.0}).into(),
-            (coord! {x: -135.0, y: -20.0}).into(),
-        ]);
+        let manual_buf = write_test_multipoint_buf::<LittleEndian>(1);
         let mut auto_buf = Vec::new();
+
+        let mp = get_test_multipoint();
         mp.write_as_wkb(&mut auto_buf).unwrap();
 
         assert_eq!(manual_buf, auto_buf);
@@ -904,28 +947,9 @@ mod tests {
 
     #[test]
     fn read_multipoint() {
-        let mut le_buf = Vec::new();
-        // little endian
-        le_buf.write_u8(1).unwrap();
-        // geom type flag
-        le_buf.write_u32::<LittleEndian>(4).unwrap();
-        le_buf.write_u32::<LittleEndian>(4).unwrap();
-        le_buf.write_f64::<LittleEndian>(-105.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(40.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(-95.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(15.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(105.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(-40.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(-135.0).unwrap();
-        le_buf.write_f64::<LittleEndian>(-20.0).unwrap();
+        let mp = get_test_multipoint();
 
-        let mp: MultiPoint<f64> = MultiPoint::new(vec![
-            (coord! {x: -105.0, y: 40.0}).into(),
-            (coord! {x: -95.0, y: 15.0}).into(),
-            (coord! {x: 105.0, y: -40.0}).into(),
-            (coord! {x: -135.0, y: -20.0}).into(),
-        ]);
-
+        let le_buf = write_test_multipoint_buf::<LittleEndian>(1);
         let mut le_rdr = Cursor::new(le_buf);
         let le_mp = MultiPoint::read_from_wkb(&mut le_rdr).unwrap();
 
@@ -933,33 +957,90 @@ mod tests {
             assert!(points_equal(&a, &b));
         }
 
-        let mut be_buf = Vec::new();
-        // little endian
-        be_buf.write_u8(0).unwrap();
-        // geom type flag
-        be_buf.write_u32::<BigEndian>(4).unwrap();
-        be_buf.write_u32::<BigEndian>(4).unwrap();
-        be_buf.write_f64::<BigEndian>(-105.0).unwrap();
-        be_buf.write_f64::<BigEndian>(40.0).unwrap();
-        be_buf.write_f64::<BigEndian>(-95.0).unwrap();
-        be_buf.write_f64::<BigEndian>(15.0).unwrap();
-        be_buf.write_f64::<BigEndian>(105.0).unwrap();
-        be_buf.write_f64::<BigEndian>(-40.0).unwrap();
-        be_buf.write_f64::<BigEndian>(-135.0).unwrap();
-        be_buf.write_f64::<BigEndian>(-20.0).unwrap();
-
-        let mp: MultiPoint<f64> = MultiPoint::new(vec![
-            (coord! {x: -105.0, y: 40.0}).into(),
-            (coord! {x: -95.0, y: 15.0}).into(),
-            (coord! {x: 105.0, y: -40.0}).into(),
-            (coord! {x: -135.0, y: -20.0}).into(),
-        ]);
-
+        let be_buf = write_test_multipoint_buf::<BigEndian>(0);
         let mut be_rdr = Cursor::new(be_buf);
         let be_mp = MultiPoint::read_from_wkb(&mut be_rdr).unwrap();
 
         for (a, b) in zip(&mp.0, &be_mp.0) {
             assert!(points_equal(&a, &b));
+        }
+    }
+
+    #[test]
+    fn write_multilinestring() {
+        let manual_buf = write_test_multilinestring_buf::<LittleEndian>(1);
+        let mls = get_test_multilinestring();
+        let mut auto_buf = Vec::new();
+        mls.write_as_wkb(&mut auto_buf).unwrap();
+
+        assert_eq!(manual_buf, auto_buf);
+
+        // lets also make sure we can read in our own output
+        let mut rdr = Cursor::new(auto_buf);
+        let written_mls = MultiLineString::read_from_wkb(&mut rdr).unwrap();
+
+        for (a, b) in zip(&mls, &written_mls) {
+            assert!(linestrings_equal(&a, &b));
+        }
+    }
+
+    #[test]
+    fn read_multilinestring() {
+        let mls = get_test_multilinestring();
+
+        let le_buf = write_test_multilinestring_buf::<LittleEndian>(1);
+        let mut rdr = Cursor::new(le_buf);
+        let le_cmp_mls = MultiLineString::read_from_wkb(&mut rdr).unwrap();
+
+        for (a, b) in zip(&mls, &le_cmp_mls) {
+            assert!(linestrings_equal(&a, &b));
+        }
+
+        let be_buf = write_test_multilinestring_buf::<BigEndian>(0);
+        let mut rdr = Cursor::new(be_buf);
+        let be_cmp_mls = MultiLineString::read_from_wkb(&mut rdr).unwrap();
+
+        for (a, b) in zip(&mls, &be_cmp_mls) {
+            assert!(linestrings_equal(&a, &b));
+        }
+    }
+
+    #[test]
+    fn write_multipolygon() {
+        let manual_buf = write_test_multipolygon_buf::<LittleEndian>(1);
+        let mp = get_test_multipolygon();
+        let mut auto_buf = Vec::new();
+        mp.write_as_wkb(&mut auto_buf).unwrap();
+
+        assert_eq!(manual_buf, auto_buf);
+
+        // lets also make sure we can read in our own output
+        let mut rdr = Cursor::new(auto_buf);
+        let written_mp = MultiPolygon::read_from_wkb(&mut rdr).unwrap();
+
+        for (a, b) in zip(&mp, &written_mp) {
+            assert!(polygons_equal(&a, &b));
+        }
+    }
+
+    #[test]
+    fn read_multipolygon() {
+        let mls = get_test_multipolygon();
+
+        let le_buf = write_test_multipolygon_buf::<LittleEndian>(1);
+        let mut rdr = Cursor::new(le_buf);
+        let le_cmp_mls = MultiPolygon::read_from_wkb(&mut rdr).unwrap();
+
+        for (a, b) in zip(&mls, &le_cmp_mls) {
+            assert!(polygons_equal(&a, &b));
+        }
+
+        let be_buf = write_test_multipolygon_buf::<BigEndian>(0);
+        let mut rdr = Cursor::new(be_buf);
+        let be_cmp_mls = MultiPolygon::read_from_wkb(&mut rdr).unwrap();
+
+        for (a, b) in zip(&mls, &be_cmp_mls) {
+            assert!(polygons_equal(&a, &b));
         }
     }
 }
