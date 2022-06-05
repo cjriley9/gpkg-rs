@@ -7,6 +7,8 @@ pub enum Error {
     GeomDecodeError,
     #[error("Error encoding WKB geometry")]
     GeomEncodeError,
+    #[error("IO error when encoding or decoding WKB geometry")]
+    WkbIoError(#[from] std::io::Error),
     #[error("Unsupported WKB geometry type")]
     UnsupportedGeometryType,
     #[error("Error when accessing the SQLite database")]
