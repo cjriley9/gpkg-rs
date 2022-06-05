@@ -803,30 +803,6 @@ mod tests {
         MultiPolygon::new(vec![poly1, poly2])
     }
 
-    macro_rules! make_write_test {
-        ($t:ty as $name:ident, $buf:ident, $item:ident, ) => {
-            #[test]
-            fn $name() {
-                let manual_buf = $buf::<LittleEndian>(1);
-                let point = $item();
-                let mut auto_buf = Vec::new();
-                point.write_as_wkb(&mut auto_buf).unwrap();
-                assert_eq!(manual_buf, auto_buf);
-
-                // lets also make sure we can read in our own output
-                let mut rdr = Cursor::new(auto_buf);
-                let written_point = <$t>::read_from_wkb(&mut rdr).unwrap();
-                assert!(points_equal(&point, &written_point));
-            }
-        };
-    }
-
-    // make_write_test!(Point<f64> as write_point, write_test_point_buf, get_test_point);
-    // make_write_test!(LineString<f64> as write_linestring, write_test_linestring_buf, get_test_linestring);
-    // make_write_test!(Polygon<f64> as write_polygon, write_test_polygon_buf, get_test_polygon);
-    // make_write_test!(MultiPoint<f64> as write_multipoint, write_test_multipoint_buf, get_test_multipoint);
-    // make_write_test!(MultiLineString<f64> as write_multilinestring, write_test_multilinestring_buf, get_test_multilinestring);
-    // make_write_test!(MultiPolygon<f64> as write_multipolygon, write_test_multipolygon_buf, get_test_multipolygon);
     #[test]
     fn write_point() {
         let manual_buf = write_test_point_buf::<LittleEndian>(1);
