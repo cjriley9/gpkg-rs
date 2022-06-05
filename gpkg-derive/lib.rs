@@ -287,7 +287,7 @@ fn impl_model(
     );
     let mut geom_column_sql: Option<String> = None;
     let mut contents_sql = format!(
-        r#"INSERT INTO gpkg_contents (layer_name, data_type) VALUES ("{}", "{}");"#,
+        r#"INSERT INTO gpkg_contents (table_name, data_type) VALUES ("{}", "{}");"#,
         layer_name_final, "attributes"
     );
 
@@ -306,7 +306,7 @@ fn impl_model(
             geom_info.z as i32
         ));
         contents_sql = format!(
-            r#"INSERT INTO gpkg_contents (layer_name, data_type, srs_id) VALUES ("{}", "{}", {});"#,
+            r#"INSERT INTO gpkg_contents (table_name, data_type, srs_id) VALUES ("{}", "{}", {});"#,
             layer_name_final, "features", geom_info.srs_id
         );
     };
