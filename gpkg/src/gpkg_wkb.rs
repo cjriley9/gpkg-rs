@@ -526,7 +526,7 @@ mod tests {
 
     use super::*;
     use byteorder::{BigEndian, LittleEndian};
-    use geo_types::{coord, Coordinate, LineString, Point, Polygon};
+    use geo_types::{coord, Coordinate, LineString, MultiPoint, Point, Polygon};
 
     fn points_equal(p1: &Point<f64>, p2: &Point<f64>) -> bool {
         return (p1.x().to_ne_bytes() == p2.x().to_ne_bytes())
@@ -863,5 +863,103 @@ mod tests {
         let be_cmp_poly = Polygon::read_from_wkb(&mut be_rdr).unwrap();
 
         assert!(polygons_equal(&poly, &be_cmp_poly));
+    }
+
+    #[test]
+    fn write_multipoint() {
+        let mut manual_buf = Vec::new();
+        // little endian
+        manual_buf.write_u8(1).unwrap();
+        // geom type flag
+        manual_buf.write_u32::<LittleEndian>(4).unwrap();
+        manual_buf.write_u32::<LittleEndian>(4).unwrap();
+        manual_buf.write_f64::<LittleEndian>(-105.0).unwrap();
+        manual_buf.write_f64::<LittleEndian>(40.0).unwrap();
+        manual_buf.write_f64::<LittleEndian>(-95.0).unwrap();
+        manual_buf.write_f64::<LittleEndian>(15.0).unwrap();
+        manual_buf.write_f64::<LittleEndian>(105.0).unwrap();
+        manual_buf.write_f64::<LittleEndian>(-40.0).unwrap();
+        manual_buf.write_f64::<LittleEndian>(-135.0).unwrap();
+        manual_buf.write_f64::<LittleEndian>(-20.0).unwrap();
+
+        let mp: MultiPoint<f64> = MultiPoint::new(vec![
+            (coord! {x: -105.0, y: 40.0}).into(),
+            (coord! {x: -95.0, y: 15.0}).into(),
+            (coord! {x: 105.0, y: -40.0}).into(),
+            (coord! {x: -135.0, y: -20.0}).into(),
+        ]);
+        let mut auto_buf = Vec::new();
+        mp.write_as_wkb(&mut auto_buf).unwrap();
+
+        assert_eq!(manual_buf, auto_buf);
+
+        // lets also make sure we can read in our own output
+        let mut rdr = Cursor::new(auto_buf);
+        let written_mp = MultiPoint::read_from_wkb(&mut rdr).unwrap();
+
+        for (a, b) in zip(&mp.0, &written_mp.0) {
+            assert!(points_equal(&a, &b));
+        }
+    }
+
+    #[test]
+    fn read_multipoint() {
+        let mut le_buf = Vec::new();
+        // little endian
+        le_buf.write_u8(1).unwrap();
+        // geom type flag
+        le_buf.write_u32::<LittleEndian>(4).unwrap();
+        le_buf.write_u32::<LittleEndian>(4).unwrap();
+        le_buf.write_f64::<LittleEndian>(-105.0).unwrap();
+        le_buf.write_f64::<LittleEndian>(40.0).unwrap();
+        le_buf.write_f64::<LittleEndian>(-95.0).unwrap();
+        le_buf.write_f64::<LittleEndian>(15.0).unwrap();
+        le_buf.write_f64::<LittleEndian>(105.0).unwrap();
+        le_buf.write_f64::<LittleEndian>(-40.0).unwrap();
+        le_buf.write_f64::<LittleEndian>(-135.0).unwrap();
+        le_buf.write_f64::<LittleEndian>(-20.0).unwrap();
+
+        let mp: MultiPoint<f64> = MultiPoint::new(vec![
+            (coord! {x: -105.0, y: 40.0}).into(),
+            (coord! {x: -95.0, y: 15.0}).into(),
+            (coord! {x: 105.0, y: -40.0}).into(),
+            (coord! {x: -135.0, y: -20.0}).into(),
+        ]);
+
+        let mut le_rdr = Cursor::new(le_buf);
+        let le_mp = MultiPoint::read_from_wkb(&mut le_rdr).unwrap();
+
+        for (a, b) in zip(&mp.0, &le_mp.0) {
+            assert!(points_equal(&a, &b));
+        }
+
+        let mut be_buf = Vec::new();
+        // little endian
+        be_buf.write_u8(0).unwrap();
+        // geom type flag
+        be_buf.write_u32::<BigEndian>(4).unwrap();
+        be_buf.write_u32::<BigEndian>(4).unwrap();
+        be_buf.write_f64::<BigEndian>(-105.0).unwrap();
+        be_buf.write_f64::<BigEndian>(40.0).unwrap();
+        be_buf.write_f64::<BigEndian>(-95.0).unwrap();
+        be_buf.write_f64::<BigEndian>(15.0).unwrap();
+        be_buf.write_f64::<BigEndian>(105.0).unwrap();
+        be_buf.write_f64::<BigEndian>(-40.0).unwrap();
+        be_buf.write_f64::<BigEndian>(-135.0).unwrap();
+        be_buf.write_f64::<BigEndian>(-20.0).unwrap();
+
+        let mp: MultiPoint<f64> = MultiPoint::new(vec![
+            (coord! {x: -105.0, y: 40.0}).into(),
+            (coord! {x: -95.0, y: 15.0}).into(),
+            (coord! {x: 105.0, y: -40.0}).into(),
+            (coord! {x: -135.0, y: -20.0}).into(),
+        ]);
+
+        let mut be_rdr = Cursor::new(be_buf);
+        let be_mp = MultiPoint::read_from_wkb(&mut be_rdr).unwrap();
+
+        for (a, b) in zip(&mp.0, &be_mp.0) {
+            assert!(points_equal(&a, &b));
+        }
     }
 }
