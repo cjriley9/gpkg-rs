@@ -345,10 +345,12 @@ fn impl_model(
     // this is so that lifetimes will work
     let new = quote!(
         impl GPKGModel <'_> for #name #final_generics {
+            #[inline]
             fn get_gpkg_layer_name() -> &'static str {
                 std::stringify!(#layer_name_final)
             }
 
+            #[inline]
             fn get_create_sql() -> &'static str {
                 std::stringify!(
                     BEGIN;
@@ -362,6 +364,7 @@ fn impl_model(
                 )
             }
 
+            #[inline]
             fn get_insert_sql() -> &'static str {
                 std::stringify!(
                     INSERT INTO #layer_name_final (
@@ -372,12 +375,14 @@ fn impl_model(
                 )
             }
 
+            #[inline]
             fn get_select_sql() -> &'static str {
                 std::stringify!(
                     SELECT #(#column_names),* FROM #layer_name_final;
                 )
             }
 
+            #[inline]
             fn get_select_where(predicate: &str) -> String {
                 (std::stringify!(
                     SELECT #(#column_names),* FROM #layer_name_final WHERE
