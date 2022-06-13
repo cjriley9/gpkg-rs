@@ -17,5 +17,4 @@ The goal of the crate is to adhere to the Geopackage [specification](https://www
 - [ ] Write image tile data 
 
 ## Notes:
-* Reading and writing 2D vector data currently only supports little endian WKB encoding due to a dependency on the [wkb](https://docs.rs/wkb/latest/wkb/) crate.
 * Reading and writing 3D vector data is currently in a holding pattern until this [pull request](https://github.com/georust/geo/pull/797) is either accepted or rejected.
