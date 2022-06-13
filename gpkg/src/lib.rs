@@ -1,3 +1,5 @@
+//! gpkg is a crate intended to enable interactions with [GeoPackages](https://www.geopackage.org/)
+
 #![allow(dead_code)]
 mod gpkg_wkb;
 mod result;
@@ -13,7 +15,7 @@ pub use gpkg_derive::GPKGModel;
 pub use gpkg_wkb::GeoPackageWKB;
 #[doc(inline)]
 pub use result::{Error, Result};
-use rusqlite::{params, Connection, DatabaseName, OpenFlags};
+use rusqlite::{params, Connection, DatabaseName, OpenFlags, OptionalExtension};
 #[doc(inline)]
 pub use srs::SpatialRefSys;
 use std::path::Path;
@@ -24,10 +26,9 @@ pub struct GeoPackage {
     /// The underlying rusqlite connection for the GeoPackage
     ///
     /// Access is provided here to allow a user to do what is necessary for their specific use case,
-    /// but extra care should be taken if using this for write operations, since the
+    /// but extra care should be taken when using this, since the
     /// integrity of the GeoPackage could be compromised.
-    pub conn: Connection,
-    tables: Vec<TableDefinition>,
+    pub conn: rusqlite::Connection,
 }
 
 /// A trait that allows for easy writes and reads of a struct into a GeoPackage.
@@ -55,12 +56,17 @@ enum GPKGDataType {
 }
 
 #[derive(Debug)]
-struct TableDefinition {
+struct LayerDefinition {
     name: String,
-    data_type: GPKGDataType,
+    data_type: String,
+    identifier: Option<String>,
+    description: Option<String>,
+    last_change: String,
+    min_x: Option<f64>,
+    min_y: Option<f64>,
+    max_x: Option<f64>,
+    max_y: Option<f64>,
     srs_id: Option<i64>,
-    identifier: String,
-    description: String,
 }
 
 impl GeoPackage {
@@ -72,10 +78,13 @@ impl GeoPackage {
     /// * gpkg_tile_matrix
     /// * gpkg_tile_matrix_set
     ///
-    /// # Examples
-    /// ```ignore
+    /// # Usage
+    /// ```
     /// # use std::path::Path;
-    /// let path = Path::new("./test.gpkg");
+    /// # use gpkg::GeoPackage;
+    /// # use tempfile::tempdir;
+    /// # let dir = tempdir().unwrap();
+    /// # let path = dir.path().join("create.gpkg");
     /// let gp = GeoPackage::create(path).unwrap();
     /// ```
     pub fn create<P: AsRef<Path>>(path: P) -> Result<GeoPackage> {
@@ -83,10 +92,7 @@ impl GeoPackage {
             return Err(Error::CreateExistingError);
         }
         let conn = Connection::open(path)?;
-        let gpkg = GeoPackage {
-            conn,
-            tables: Vec::new(),
-        };
+        let gpkg = GeoPackage { conn };
         gpkg.conn
             .pragma_update(Some(DatabaseName::Main), "application_id", 0x47504B47)?;
         gpkg.conn
@@ -105,19 +111,36 @@ impl GeoPackage {
         gpkg.conn.execute(CREATE_TILE_MATRIX_SET_TABLE, [])?;
         Ok(gpkg)
     }
-
-    fn create_layer<'a, T: GPKGModel<'a>>(&self) -> Result<()> {
+    /// Create a new layer to store instances of a type that implements [GPKGModel]
+    /// # Usage
+    /// ```
+    /// # use std::path::Path;
+    /// # use gpkg::{GeoPackage, GPKGModel};
+    /// # use tempfile::tempdir;
+    /// # let dir = tempdir().unwrap();
+    /// # let path = dir.path().join("create_layer.gpkg");
+    /// # let gp = GeoPackage::create(path).unwrap();
+    /// #[derive(GPKGModel)]
+    /// struct TestLayer {
+    ///     field1: i64,
+    ///     field2: String,
+    ///     field3: f64,
+    /// }
+    ///
+    /// gp.create_layer::<TestLayer>().unwrap();
+    /// ```
+    pub fn create_layer<'a, T: GPKGModel<'a>>(&self) -> Result<()> {
         self.conn.execute_batch(T::get_create_sql())?;
         Ok(())
     }
 
-    fn insert_record<'a, T: GPKGModel<'a>>(&self, record: &T) -> Result<()> {
+    pub fn insert_record<'a, T: GPKGModel<'a>>(&self, record: &T) -> Result<()> {
         let sql = T::get_insert_sql();
         self.conn.execute(sql, record.as_params().as_slice())?;
         Ok(())
     }
 
-    fn insert_many<'a, T: GPKGModel<'a>>(&mut self, records: &Vec<T>) -> Result<()> {
+    pub fn insert_many<'a, T: GPKGModel<'a>>(&mut self, records: &Vec<T>) -> Result<()> {
         let sql = T::get_insert_sql();
         let tx = self.conn.transaction()?;
         // extra block is here so that stmt gets dropped
@@ -131,7 +154,34 @@ impl GeoPackage {
         Ok(())
     }
 
-    fn get_all<'a, T: GPKGModel<'a>>(&self) -> Result<Vec<T>> {
+    /// Fetch all records in the layer containing items of this type that
+    /// match the given predicate.
+    /// # Examples
+    /// ```
+    /// # use std::path::Path;
+    /// # use gpkg::{GeoPackage, GPKGModel};
+    /// # use tempfile::tempdir;
+    /// # let dir = tempdir().unwrap();
+    /// # let path = dir.path().join("get_all.gpkg");
+    /// # let gp = GeoPackage::create(path).unwrap();
+    /// #[derive(GPKGModel)]
+    /// struct Item {
+    ///     length: f64,
+    /// }
+    ///
+    /// gp.create_layer::<Item>().unwrap();
+    ///
+    /// let item1 = Item {length: 25.0};
+    /// gp.insert_record(&item1).unwrap();
+    ///
+    /// let item2 = Item {length: 5.0};
+    /// gp.insert_record(&item2).unwrap();
+    ///
+    /// let records: Vec<Item> = gp.get_all::<Item>().unwrap();
+    ///
+    /// assert_eq!(records.len(), 2);
+    /// ```
+    pub fn get_all<'a, T: GPKGModel<'a>>(&self) -> Result<Vec<T>> {
         let mut stmt = self.conn.prepare(T::get_select_sql())?;
         let mut out_vec = Vec::new();
         let rows = stmt.query_map([], |row| T::from_row(row))?;
@@ -141,21 +191,34 @@ impl GeoPackage {
         Ok(out_vec)
     }
 
-    /// Fetch all records from the table containing items of this type that
+    /// Fetch all records in the layer containing items of this type that
     /// match the given predicate.
     /// # Examples
-    /// ```ignore
+    /// ```
+    /// # use std::path::Path;
+    /// # use gpkg::{GeoPackage, GPKGModel};
+    /// # use tempfile::tempdir;
+    /// # let dir = tempdir().unwrap();
+    /// # let path = dir.path().join("get_all.gpkg");
+    /// # let gp = GeoPackage::create(path).unwrap();
+    /// #[derive(GPKGModel)]
     /// struct Item {
     ///     length: f64,
     /// }
     ///
-    /// let records: Vec<Item> = gp.get_where::<Item>("length > 10.0").unwrap();
+    /// gp.create_layer::<Item>().unwrap();
     ///
-    /// for r in records {
-    ///     assert!(r.length > 10.0);
-    /// }
+    /// let item1 = Item {length: 25.0};
+    /// gp.insert_record(&item1).unwrap();
+    ///
+    /// let item2 = Item {length: 5.0};
+    /// gp.insert_record(&item2).unwrap();
+    ///
+    /// let records: Vec<Item> = gp.get_where::<Item>("length >= 10.0").unwrap();
+    ///
+    /// assert_eq!(records.len(), 1);
     /// ```
-    fn get_where<'a, T: GPKGModel<'a>>(&self, predicate: &str) -> crate::Result<Vec<T>> {
+    pub fn get_where<'a, T: GPKGModel<'a>>(&self, predicate: &str) -> crate::Result<Vec<T>> {
         let mut stmt = self.conn.prepare(T::get_select_where(predicate).as_str())?;
         let mut out_vec = Vec::new();
         let rows = stmt.query_map([], |row| T::from_row(row))?;
@@ -182,7 +245,19 @@ impl GeoPackage {
         Ok(())
     }
 
-    fn update_layer_srs_id(&mut self, layer_name: &str, srs_id: i64) -> Result<()> {
+    /// Retrieve the srs_id for a layer
+    pub fn get_layer_srs_id(&self, layer_name: &str) -> Result<Option<i64>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT FROM gpkg_contents WHERE table_name = ?1")?;
+        let temp: Option<i64> = stmt.query_row(params![layer_name], |r| r.get(0).optional())?;
+        Ok(temp)
+    }
+
+    /// Update the SRS ID for a layer.
+    ///
+    /// Note that this does not check if the provided SRS has a corresponding entry in the GeoPackage metadata.
+    pub fn update_layer_srs_id(&mut self, layer_name: &str, srs_id: i64) -> Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute(
             "UPDATE gpkg_contents SET srs_id = ?1 WHERE layer_name = ?2",
@@ -243,10 +318,8 @@ impl GeoPackage {
                 return Err(Error::ValidationError);
             }
         }
-        // get the tables
-        let tables = Vec::new();
 
-        Ok(GeoPackage { conn, tables })
+        Ok(GeoPackage { conn })
     }
 }
 
