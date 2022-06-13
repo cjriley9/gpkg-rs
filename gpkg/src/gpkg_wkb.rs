@@ -388,6 +388,10 @@ full_wkb! {geo_types::MultiPolygon<f64>, 6}
 
 impl FullWKB for geo_types::GeometryCollection<f64> {
     fn write_as_wkb(&self, w: &mut impl Write) -> Result<()> {
+        // little endian
+        w.write_u8(1)?;
+        w.write_u32::<LittleEndian>(7)?;
+        w.write_u32::<LittleEndian>(self.0.len() as u32)?;
         for geom in &self.0 {
             geom.write_as_wkb(w)?
         }
@@ -522,12 +526,13 @@ impl FullWKB for geo_types::Geometry<f64> {
 
 #[cfg(test)]
 mod tests {
-    use std::iter::zip;
+    use std::{iter::zip, panic};
 
     use super::*;
     use byteorder::{BigEndian, LittleEndian};
     use geo_types::{
-        coord, Coordinate, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon,
+        coord, Coordinate, Geometry, GeometryCollection, LineString, MultiLineString, MultiPoint,
+        MultiPolygon, Point, Polygon,
     };
 
     fn points_equal(p1: &Point<f64>, p2: &Point<f64>) -> bool {
@@ -803,6 +808,33 @@ mod tests {
         MultiPolygon::new(vec![poly1, poly2])
     }
 
+    fn write_test_geom_collection_buf<T: ByteOrder>(endian_byte: u8) -> Vec<u8> {
+        let mut manual_buf = Vec::new();
+        manual_buf.write_u8(endian_byte).unwrap();
+        // geom type flag
+        manual_buf.write_u32::<T>(7).unwrap();
+        // number of geometries, we have 6, one for each of the geometry_types
+        manual_buf.write_u32::<T>(6).unwrap();
+        manual_buf.extend(write_test_point_buf::<T>(endian_byte));
+        manual_buf.extend(write_test_linestring_buf::<T>(endian_byte));
+        manual_buf.extend(write_test_polygon_buf::<T>(endian_byte));
+        manual_buf.extend(write_test_multipoint_buf::<T>(endian_byte));
+        manual_buf.extend(write_test_multilinestring_buf::<T>(endian_byte));
+        manual_buf.extend(write_test_multipolygon_buf::<T>(endian_byte));
+        manual_buf
+    }
+
+    fn get_test_geom_collection() -> GeometryCollection<f64> {
+        GeometryCollection::new_from(vec![
+            Geometry::Point(get_test_point()),
+            Geometry::LineString(get_test_linestring()),
+            Geometry::Polygon(get_test_polygon()),
+            Geometry::MultiPoint(get_test_multipoint()),
+            Geometry::MultiLineString(get_test_multilinestring()),
+            Geometry::MultiPolygon(get_test_multipolygon()),
+        ])
+    }
+
     #[test]
     fn write_point() {
         let manual_buf = write_test_point_buf::<LittleEndian>(1);
@@ -1017,6 +1049,172 @@ mod tests {
 
         for (a, b) in zip(&mls, &be_cmp_mls) {
             assert!(polygons_equal(&a, &b));
+        }
+    }
+
+    #[test]
+    fn write_geometry() {
+        // because the WKB geometry type is just a union of geometry types, we can reuse their write methods
+        let manual_buf = write_test_point_buf::<LittleEndian>(1);
+        let mp = get_test_point();
+        let mp_geom = Geometry::from(mp.clone());
+        let mut auto_buf = Vec::new();
+        mp_geom.write_as_wkb(&mut auto_buf).unwrap();
+
+        assert_eq!(manual_buf, auto_buf);
+
+        // lets also make sure we can read in our own output
+        let mut rdr = Cursor::new(auto_buf);
+        let written_mp_geom = Geometry::read_from_wkb(&mut rdr).unwrap();
+
+        if let Geometry::Point(written_mp) = written_mp_geom {
+            assert!(points_equal(&mp, &written_mp));
+        } else {
+            panic!();
+        }
+
+        let manual_buf = write_test_linestring_buf::<LittleEndian>(1);
+        let mp = get_test_linestring();
+        let mp_geom = Geometry::from(mp.clone());
+        let mut auto_buf = Vec::new();
+        mp_geom.write_as_wkb(&mut auto_buf).unwrap();
+
+        assert_eq!(manual_buf, auto_buf);
+
+        // lets also make sure we can read in our own output
+        let mut rdr = Cursor::new(auto_buf);
+        let written_mp_geom = Geometry::read_from_wkb(&mut rdr).unwrap();
+
+        if let Geometry::LineString(written_mp) = written_mp_geom {
+            assert!(linestrings_equal(&mp, &written_mp));
+        } else {
+            panic!();
+        }
+
+        let manual_buf = write_test_polygon_buf::<LittleEndian>(1);
+        let mp = get_test_polygon();
+        let mp_geom = Geometry::from(mp.clone());
+        let mut auto_buf = Vec::new();
+        mp_geom.write_as_wkb(&mut auto_buf).unwrap();
+
+        assert_eq!(manual_buf, auto_buf);
+
+        // lets also make sure we can read in our own output
+        let mut rdr = Cursor::new(auto_buf);
+        let written_mp_geom = Geometry::read_from_wkb(&mut rdr).unwrap();
+
+        if let Geometry::Polygon(written_mp) = written_mp_geom {
+            assert!(polygons_equal(&mp, &written_mp));
+        } else {
+            panic!();
+        }
+
+        let manual_buf = write_test_multipoint_buf::<LittleEndian>(1);
+        let mp = get_test_multipoint();
+        let mp_geom = Geometry::from(mp.clone());
+        let mut auto_buf = Vec::new();
+        mp_geom.write_as_wkb(&mut auto_buf).unwrap();
+
+        assert_eq!(manual_buf, auto_buf);
+
+        // lets also make sure we can read in our own output
+        let mut rdr = Cursor::new(auto_buf);
+        let written_mp_geom = Geometry::read_from_wkb(&mut rdr).unwrap();
+
+        if let Geometry::MultiPoint(written_mp) = written_mp_geom {
+            for (a, b) in zip(&mp, &written_mp) {
+                assert!(points_equal(&a, &b));
+            }
+        } else {
+            panic!();
+        }
+
+        let manual_buf = write_test_multilinestring_buf::<LittleEndian>(1);
+        let mp = get_test_multilinestring();
+        let mp_geom = Geometry::from(mp.clone());
+        let mut auto_buf = Vec::new();
+        mp_geom.write_as_wkb(&mut auto_buf).unwrap();
+
+        assert_eq!(manual_buf, auto_buf);
+
+        // lets also make sure we can read in our own output
+        let mut rdr = Cursor::new(auto_buf);
+        let written_mp_geom = Geometry::read_from_wkb(&mut rdr).unwrap();
+
+        if let Geometry::MultiLineString(written_mp) = written_mp_geom {
+            for (a, b) in zip(&mp, &written_mp) {
+                assert!(linestrings_equal(&a, &b));
+            }
+        } else {
+            panic!();
+        }
+
+        let manual_buf = write_test_multipolygon_buf::<LittleEndian>(1);
+        let mp = get_test_multipolygon();
+        let mp_geom = Geometry::from(mp.clone());
+        let mut auto_buf = Vec::new();
+        mp_geom.write_as_wkb(&mut auto_buf).unwrap();
+
+        assert_eq!(manual_buf, auto_buf);
+
+        // lets also make sure we can read in our own output
+        let mut rdr = Cursor::new(auto_buf);
+        let written_mp_geom = Geometry::read_from_wkb(&mut rdr).unwrap();
+
+        if let Geometry::MultiPolygon(written_mp) = written_mp_geom {
+            for (a, b) in zip(&mp, &written_mp) {
+                assert!(polygons_equal(&a, &b));
+            }
+        } else {
+            panic!();
+        }
+    }
+
+    #[test]
+    fn write_geometry_collection() {
+        let manual_buf = write_test_geom_collection_buf::<LittleEndian>(1);
+        let geom = get_test_geom_collection();
+        let mut auto_buf = Vec::new();
+        geom.write_as_wkb(&mut auto_buf).unwrap();
+
+        assert_eq!(manual_buf, auto_buf);
+
+        let mut rdr = Cursor::new(auto_buf);
+        let written_geom = GeometryCollection::read_from_wkb(&mut rdr).unwrap();
+        assert_eq!(written_geom.len(), 6);
+
+        assert!(points_equal(
+            &Point::try_from(geom.0[0].clone()).unwrap(),
+            &Point::try_from(written_geom.0[0].clone()).unwrap(),
+        ));
+        assert!(linestrings_equal(
+            &LineString::try_from(geom.0[1].clone()).unwrap(),
+            &LineString::try_from(written_geom.0[1].clone()).unwrap(),
+        ));
+        assert!(polygons_equal(
+            &Polygon::try_from(geom.0[2].clone()).unwrap(),
+            &Polygon::try_from(written_geom.0[2].clone()).unwrap(),
+        ));
+
+        for (a, b) in zip(
+            &MultiPoint::try_from(geom.0[3].clone()).unwrap(),
+            &MultiPoint::try_from(written_geom.0[3].clone()).unwrap(),
+        ) {
+            assert!(points_equal(a, b));
+        }
+
+        for (a, b) in zip(
+            &MultiLineString::try_from(geom.0[4].clone()).unwrap(),
+            &MultiLineString::try_from(written_geom.0[4].clone()).unwrap(),
+        ) {
+            assert!(linestrings_equal(a, b));
+        }
+
+        for (a, b) in zip(
+            &MultiPolygon::try_from(geom.0[5].clone()).unwrap(),
+            &MultiPolygon::try_from(written_geom.0[5].clone()).unwrap(),
+        ) {
+            assert!(polygons_equal(a, b));
         }
     }
 }
