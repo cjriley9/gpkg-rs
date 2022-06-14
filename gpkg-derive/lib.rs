@@ -1,38 +1,68 @@
 #![allow(dead_code)]
+use lazy_static::lazy_static;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
+use std::collections::HashMap;
 use std::ops::Deref;
 use syn::{
     parse2, Attribute, DeriveInput, Field, GenericArgument, GenericParam, Generics, Ident, Lit,
     LitInt, Meta, MetaNameValue, Type, TypePath, TypeReference,
 };
 
-const GEO_TYPES: &'static [&'static str] = &[
-    "POLYGON",
-    "LINESTRING",
-    "POINT",
-    "MULTIPOLYGON",
-    "MULTILINESTRING",
-    "MULTIPOINT",
-    "POLYGONM",
-    "LINESTRINGM",
-    "POINTM",
-    "MULTIPOLYGONM",
-    "MULTILINESTRINGM",
-    "MULTIPOINTM",
-    "POLYGONZ",
-    "LINESTRINGZ",
-    "POINTZ",
-    "MULTIPOLYGONZ",
-    "MULTILINESTRINGZ",
-    "MULTIPOINTZ",
-    "POLYGONZM",
-    "LINESTRINGZM",
-    "POINTZM",
-    "MULTIPOLYGONZM",
-    "MULTILINESTRINGZM",
-    "MULTIPOINTZM",
-];
+lazy_static! {
+    static ref GEO_TYPES: HashMap<&'static str, (MZOptions, MZOptions)> = {
+        let mut m = HashMap::new();
+        m.insert("POLYGON", (MZOptions::Prohibited, MZOptions::Prohibited));
+        m.insert("LINESTRING", (MZOptions::Prohibited, MZOptions::Prohibited));
+        m.insert("POINT", (MZOptions::Prohibited, MZOptions::Prohibited));
+        m.insert(
+            "MULTIPOLYGON",
+            (MZOptions::Prohibited, MZOptions::Prohibited),
+        );
+        m.insert(
+            "MULTILINESTRING",
+            (MZOptions::Prohibited, MZOptions::Prohibited),
+        );
+        m.insert("MULTIPOINT", (MZOptions::Prohibited, MZOptions::Prohibited));
+        m.insert("POLYGONM", (MZOptions::Mandatory, MZOptions::Prohibited));
+        m.insert("LINESTRINGM", (MZOptions::Mandatory, MZOptions::Prohibited));
+        m.insert("POINTM", (MZOptions::Mandatory, MZOptions::Prohibited));
+        m.insert(
+            "MULTIPOLYGONM",
+            (MZOptions::Mandatory, MZOptions::Prohibited),
+        );
+        m.insert(
+            "MULTILINESTRINGM",
+            (MZOptions::Mandatory, MZOptions::Prohibited),
+        );
+        m.insert("MULTIPOINTM", (MZOptions::Mandatory, MZOptions::Prohibited));
+        m.insert("POLYGONZ", (MZOptions::Prohibited, MZOptions::Mandatory));
+        m.insert("LINESTRINGZ", (MZOptions::Prohibited, MZOptions::Mandatory));
+        m.insert("POINTZ", (MZOptions::Prohibited, MZOptions::Mandatory));
+        m.insert(
+            "MULTIPOLYGONZ",
+            (MZOptions::Prohibited, MZOptions::Mandatory),
+        );
+        m.insert(
+            "MULTILINESTRINGZ",
+            (MZOptions::Prohibited, MZOptions::Mandatory),
+        );
+        m.insert("MULTIPOINTZ", (MZOptions::Prohibited, MZOptions::Mandatory));
+        m.insert("POLYGONZM", (MZOptions::Mandatory, MZOptions::Mandatory));
+        m.insert("LINESTRINGZM", (MZOptions::Mandatory, MZOptions::Mandatory));
+        m.insert("POINTZM", (MZOptions::Mandatory, MZOptions::Mandatory));
+        m.insert(
+            "MULTIPOLYGONZM",
+            (MZOptions::Mandatory, MZOptions::Mandatory),
+        );
+        m.insert(
+            "MULTILINESTRINGZM",
+            (MZOptions::Mandatory, MZOptions::Mandatory),
+        );
+        m.insert("MULTIPOINTZM", (MZOptions::Mandatory, MZOptions::Mandatory));
+        m
+    };
+}
 
 /// A macro for deriving an implementation of GPKGModel for a struct
 ///
@@ -419,22 +449,12 @@ fn get_geom_field_info(field: &Field) -> Option<GeomInfo> {
                     });
                 if let Some(name) = geom_type_name {
                     let upper_name = name.to_uppercase();
-                    if GEO_TYPES.contains(&upper_name.as_str()) {
-                        let m = if upper_name.contains("M") {
-                            MZOptions::Optional
-                        } else {
-                            MZOptions::Prohibited
-                        };
-                        let z = if upper_name.contains("Z") {
-                            MZOptions::Optional
-                        } else {
-                            MZOptions::Prohibited
-                        };
+                    if let Some((m, z)) = GEO_TYPES.get((&upper_name).as_str()) {
                         return Some(GeomInfo {
                             geom_type: upper_name,
                             srs_id: 4326,
-                            m,
-                            z,
+                            m: *m,
+                            z: *z,
                         });
                     } else {
                         panic!("{} is not a supported geometry type", name);
