@@ -325,6 +325,7 @@ impl GeoPackage {
 
 #[cfg(test)]
 mod tests {
+    use geo_types::*;
     use std::fs;
     use tempfile::tempdir;
 
@@ -475,5 +476,131 @@ mod tests {
         let db2 = GeoPackage::open(&filename).unwrap();
         let retrieved = db2.get_all::<TestTableGeom>().unwrap();
         assert!(retrieved.len() == vec_for_insert.len());
+    }
+
+    #[test]
+    fn multipoint_test() {
+        #[derive(GPKGModel)]
+        struct MPTest {
+            id: i64,
+            #[geom_field("MultiPoint")]
+            geom: GPKGMultiPoint,
+        }
+
+        let filename = Path::new("./test_data/multipoint.gpkg");
+        let gp = GeoPackage::create(&filename).unwrap();
+
+        gp.create_layer::<MPTest>().unwrap();
+
+        let sample = MPTest {
+            id: 99,
+            geom: GPKGMultiPoint(geo_types::MultiPoint::new(vec![
+                (coord! {x: 1.0, y: 1.0}).into(),
+                (coord! {x: 3.0, y: 3.0}).into(),
+                (coord! {x: 5.0, y: 5.0}).into(),
+                (coord! {x: 7.0, y: 7.0}).into(),
+            ])),
+        };
+
+        gp.insert_record(&sample).unwrap();
+
+        gp.close();
+    }
+
+    fn get_test_multilinestring() -> geo_types::MultiLineString<f64> {
+        let ls1: geo_types::LineString<f64> = geo_types::LineString::new(vec![
+            coord! {x: -105.0, y: 40.0},
+            coord! {x: -106.0, y: 41.5},
+            coord! {x: -107.0, y: 43.0},
+        ]);
+
+        let ls2: geo_types::LineString<f64> = geo_types::LineString::new(vec![
+            coord! {x: -15.0, y: 4.0},
+            coord! {x: -16.0, y: 4.5},
+            coord! {x: -17.0, y: 4.0},
+        ]);
+        geo_types::MultiLineString::new(vec![ls1, ls2])
+    }
+
+    #[test]
+    fn multilinestring_test() {
+        #[derive(GPKGModel)]
+        struct MPTest {
+            id: i64,
+            #[geom_field("MultiLineString")]
+            geom: GPKGMultiLineString,
+        }
+
+        let filename = Path::new("./test_data/multilinestring.gpkg");
+        let gp = GeoPackage::create(&filename).unwrap();
+
+        gp.create_layer::<MPTest>().unwrap();
+
+        let test_geom = GPKGMultiLineString(get_test_multilinestring());
+        dbg!(test_geom.to_wkb().unwrap());
+
+        let sample = MPTest {
+            id: 99,
+            geom: test_geom,
+        };
+
+        gp.insert_record(&sample).unwrap();
+
+        gp.close();
+    }
+
+    fn get_test_multipolygon() -> MultiPolygon<f64> {
+        let poly1_exterior: LineString<f64> = LineString::new(vec![
+            coord! {x: -105.0, y: 40.0},
+            coord! {x: -106.0, y: 43.5},
+            coord! {x: -107.0, y: 41.0},
+            coord! {x: -105.0, y: 40.0},
+        ]);
+        let poly1 = Polygon::new(poly1_exterior, vec![]);
+
+        let poly2_exterior: LineString<f64> = LineString::new(vec![
+            coord! {x: -15.0, y: 4.0},
+            coord! {x: 16.0, y: 4.5},
+            coord! {x: -1.0, y: 10.0},
+            coord! {x: -10.0, y: 10.0},
+            coord! {x: -15.0, y: 4.0},
+        ]);
+
+        let poly2_interior: LineString<f64> = LineString::new(vec![
+            coord! {x: -1.53, y: 4.999},
+            coord! {x: 1.609, y: 5.67},
+            coord! {x: -2.345, y: 6.2},
+            coord! {x: -1.53, y: 4.999},
+        ]);
+        let poly2 = Polygon::new(poly2_exterior, vec![poly2_interior]);
+
+        MultiPolygon::new(vec![poly1, poly2])
+    }
+
+    #[test]
+    fn multipolygon_test() {
+        #[derive(GPKGModel)]
+        struct MPTest {
+            id: i64,
+            #[geom_field("MultiPolygon")]
+            geom: GPKGMultiPolygon,
+        }
+
+        let filename = Path::new("./test_data/multipolygon.gpkg");
+        let gp = GeoPackage::create(&filename).unwrap();
+
+        gp.create_layer::<MPTest>().unwrap();
+
+        let test_geom = GPKGMultiPolygon(get_test_multipolygon());
+        dbg!(test_geom.to_wkb().unwrap());
+
+        let sample = MPTest {
+            id: 99,
+            geom: test_geom,
+        };
+
+        gp.insert_record(&sample).unwrap();
+
+        gp.close();
     }
 }

@@ -247,7 +247,7 @@ impl WKBBytesRaw for geo_types::MultiPoint<f64> {
     fn write_as_bytes(&self, w: &mut impl Write) -> Result<()> {
         w.write_u32::<LittleEndian>(self.0.len() as u32)?;
         for p in &self.0 {
-            p.write_as_bytes(w)?
+            p.write_as_wkb(w)?
         }
         Ok(())
     }
@@ -255,7 +255,7 @@ impl WKBBytesRaw for geo_types::MultiPoint<f64> {
         let num_points = r.read_u32::<T>()?;
         let mut out_vec = Vec::with_capacity(num_points as usize);
         for _ in 0..num_points {
-            out_vec.push(geo_types::Point::<f64>::read_from_bytes::<T, _>(r)?);
+            out_vec.push(geo_types::Point::<f64>::read_from_wkb(r)?);
         }
         Ok(geo_types::MultiPoint::new(out_vec))
     }
@@ -265,7 +265,7 @@ impl WKBBytesRaw for geo_types::MultiPolygon<f64> {
     fn write_as_bytes(&self, w: &mut impl Write) -> Result<()> {
         w.write_u32::<LittleEndian>(self.0.len() as u32)?;
         for p in &self.0 {
-            p.write_as_bytes(w)?
+            p.write_as_wkb(w)?
         }
         Ok(())
     }
@@ -273,7 +273,7 @@ impl WKBBytesRaw for geo_types::MultiPolygon<f64> {
         let num_polys = r.read_u32::<T>()?;
         let mut out_vec = Vec::with_capacity(num_polys as usize);
         for _ in 0..num_polys {
-            out_vec.push(geo_types::Polygon::<f64>::read_from_bytes::<T, _>(r)?);
+            out_vec.push(geo_types::Polygon::<f64>::read_from_wkb(r)?);
         }
         Ok(geo_types::MultiPolygon::new(out_vec))
     }
@@ -283,7 +283,7 @@ impl WKBBytesRaw for geo_types::MultiLineString<f64> {
     fn write_as_bytes(&self, w: &mut impl Write) -> Result<()> {
         w.write_u32::<LittleEndian>(self.0.len() as u32)?;
         for p in &self.0 {
-            p.write_as_bytes(w)?
+            p.write_as_wkb(w)?
         }
         Ok(())
     }
@@ -291,7 +291,7 @@ impl WKBBytesRaw for geo_types::MultiLineString<f64> {
         let num_lines = r.read_u32::<T>()?;
         let mut out_vec = Vec::with_capacity(num_lines as usize);
         for _ in 0..num_lines {
-            out_vec.push(geo_types::LineString::<f64>::read_from_bytes::<T, _>(r)?);
+            out_vec.push(geo_types::LineString::<f64>::read_from_wkb(r)?);
         }
         Ok(geo_types::MultiLineString::new(out_vec))
     }
@@ -666,12 +666,29 @@ mod tests {
         manual_buf.write_u32::<T>(4).unwrap();
         // number of points
         manual_buf.write_u32::<T>(4).unwrap();
+
+        // endian byte again for point 1
+        manual_buf.write_u8(endian_byte).unwrap();
+        // linestring type for point 1
+        manual_buf.write_u32::<T>(1).unwrap();
         manual_buf.write_f64::<T>(-105.0).unwrap();
         manual_buf.write_f64::<T>(40.0).unwrap();
+        // endian byte again for point 2
+        manual_buf.write_u8(endian_byte).unwrap();
+        // linestring type for point 2
+        manual_buf.write_u32::<T>(1).unwrap();
         manual_buf.write_f64::<T>(-95.0).unwrap();
         manual_buf.write_f64::<T>(15.0).unwrap();
+        // endian byte again for point 3
+        manual_buf.write_u8(endian_byte).unwrap();
+        // linestring type for point 3
+        manual_buf.write_u32::<T>(1).unwrap();
         manual_buf.write_f64::<T>(105.0).unwrap();
         manual_buf.write_f64::<T>(-40.0).unwrap();
+        // endian byte again for point 4
+        manual_buf.write_u8(endian_byte).unwrap();
+        // linestring type for point 4
+        manual_buf.write_u32::<T>(1).unwrap();
         manual_buf.write_f64::<T>(-135.0).unwrap();
         manual_buf.write_f64::<T>(-20.0).unwrap();
 
@@ -694,6 +711,11 @@ mod tests {
         manual_buf.write_u32::<T>(5).unwrap();
         // number of linestring
         manual_buf.write_u32::<T>(2).unwrap();
+
+        // endian byte again for linestring 1
+        manual_buf.write_u8(endian_byte).unwrap();
+        // linestring type for linestring 1
+        manual_buf.write_u32::<T>(2).unwrap();
         // number of points for linestring 1
         manual_buf.write_u32::<T>(3).unwrap();
         // points
@@ -704,6 +726,10 @@ mod tests {
         manual_buf.write_f64::<T>(-107.0).unwrap();
         manual_buf.write_f64::<T>(43.0).unwrap();
 
+        // endian byte again for linestring 2
+        manual_buf.write_u8(endian_byte).unwrap();
+        // linestring type for linestring 2
+        manual_buf.write_u32::<T>(2).unwrap();
         // number of points for linestring 2
         manual_buf.write_u32::<T>(3).unwrap();
         // points
@@ -738,6 +764,11 @@ mod tests {
         manual_buf.write_u32::<T>(6).unwrap();
         // number of polygons
         manual_buf.write_u32::<T>(2).unwrap();
+
+        // endian byte again for poly 1
+        manual_buf.write_u8(endian_byte).unwrap();
+        // polygon type for polygon 1
+        manual_buf.write_u32::<T>(3).unwrap();
         // number of rings in polygon 1
         manual_buf.write_u32::<T>(1).unwrap();
         // number of points for exterior
@@ -752,6 +783,10 @@ mod tests {
         manual_buf.write_f64::<T>(-105.0).unwrap();
         manual_buf.write_f64::<T>(40.0).unwrap();
 
+        // endian byte again for poly 2
+        manual_buf.write_u8(endian_byte).unwrap();
+        // polygon type for poly 2
+        manual_buf.write_u32::<T>(3).unwrap();
         // number of rings in polygon 2
         manual_buf.write_u32::<T>(2).unwrap();
         // number of points for exterior
