@@ -72,7 +72,7 @@ lazy_static! {
 /// the used as the geomtry type for the layer. If the letters Z and/or M are present in the geometry type,
 /// the corresponding flags will be set within the GeoPackage indicating that the geometry has M or Z values.
 ///
-/// When this macro is used, an "object_id" primary key column will be created in order to comply with the specifcation,
+/// When this macro is used, an "fid" primary key column will be created in order to comply with the specifcation,
 /// but will be transparent to you as a user of this crate
 ///
 /// When using this macro for reading an existing GeoPackage layer, any unspecified columns will not be read.
@@ -385,7 +385,7 @@ fn impl_model(
                 std::stringify!(
                     BEGIN;
                     CREATE TABLE #layer_name_final (
-                        object_id INTEGER PRIMARY KEY,
+                        fid INTEGER PRIMARY KEY,
                         #(#column_defs ),*
                     );
                     #geom_column_ts
